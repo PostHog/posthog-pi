@@ -1,0 +1,59 @@
+{
+    "name": "posthog-pi",
+    "version": "0.1.0",
+    "description": "PostHog LLM Analytics extension for pi coding agent",
+    "type": "module",
+    "license": "MIT",
+    "author": "PostHog",
+    "keywords": [
+        "pi-package",
+        "posthog",
+        "ai",
+        "llm",
+        "observability",
+        "tracing",
+        "analytics"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/PostHog/posthog-pi.git"
+    },
+    "engines": {
+        "node": ">=22.0.0"
+    },
+    "packageManager": "pnpm@10.12.1",
+    "files": [
+        "src",
+        "!src/**/*.test.ts"
+    ],
+    "dependencies": {
+        "posthog-node": "^5.0.0"
+    },
+    "peerDependencies": {
+        "@mariozechner/pi-ai": "*",
+        "@mariozechner/pi-coding-agent": "*"
+    },
+    "devDependencies": {
+        "@changesets/cli": "^2.29.8",
+        "@mariozechner/pi-ai": "*",
+        "@mariozechner/pi-coding-agent": "*",
+        "@types/node": "^22.0.0",
+        "oxfmt": "^0.40.0",
+        "oxlint": "^1.55.0",
+        "typescript": "^5.8.0",
+        "vitest": "^3.0.0"
+    },
+    "pi": {
+        "extensions": [
+            "./src/index.ts"
+        ]
+    },
+    "scripts": {
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "typecheck": "tsc --noEmit",
+        "lint": "oxlint src/ && oxfmt --check .",
+        "lint:fix": "oxlint --fix src/ && oxfmt --write .",
+        "changeset": "changeset"
+    }
+}
