@@ -11,7 +11,7 @@ runs:
     using: composite
     steps:
         - name: Setup pnpm
-          uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
+          uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453 # v4.3.0
 
         - name: Setup Node.js
           uses: actions/setup-node@v4
