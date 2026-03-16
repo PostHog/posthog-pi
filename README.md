@@ -5,13 +5,13 @@ PostHog LLM Analytics extension for [pi](https://github.com/badlogic/pi-mono) co
 ## Install
 
 ```bash
-pi install git:github.com/PostHog/posthog-pi
+pi install npm:@posthog/pi
 ```
 
 Or for project-local install:
 
 ```bash
-pi install -l git:github.com/PostHog/posthog-pi
+pi install -l npm:@posthog/pi
 ```
 
 ## Configuration
