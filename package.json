@@ -1,5 +1,5 @@
 {
-    "name": "posthog-pi",
+    "name": "@posthog/pi",
     "version": "0.1.0",
     "description": "PostHog LLM Analytics extension for pi coding agent",
     "type": "module",
