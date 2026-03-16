@@ -1,4 +1,4 @@
-# posthog-pi
+# @posthog/pi
 
 PostHog LLM Analytics extension for [pi](https://github.com/badlogic/pi-mono) coding agent. Captures LLM generations, tool executions, and conversation traces, sending them to PostHog as structured `$ai_*` events for the [LLM Analytics dashboard](https://posthog.com/docs/ai-engineering/observability).
 

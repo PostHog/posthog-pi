@@ -48,7 +48,7 @@ export default function (pi: ExtensionAPI) {
     if (!config.enabled) return
 
     if (!config.apiKey) {
-        console.warn('posthog-pi: missing POSTHOG_API_KEY, extension will not capture events')
+        console.warn('@posthog/pi: missing POSTHOG_API_KEY, extension will not capture events')
         return
     }
 
@@ -134,7 +134,7 @@ export default function (pi: ExtensionAPI) {
             })
             return client
         } catch (e) {
-            console.error('posthog-pi: failed to initialize PostHog client:', e)
+            console.error('@posthog/pi: failed to initialize PostHog client:', e)
             return null
         }
     }

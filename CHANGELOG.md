@@ -1,1 +1,7 @@
-# posthog-pi
+# @posthog/pi
+
+## 0.1.0
+
+### Minor Changes
+
+- Initial release
