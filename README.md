@@ -2,10 +2,11 @@
 
 PostHog extension package for [pi](https://github.com/badlogic/pi-mono) coding agent.
 
-It currently provides two capabilities:
+It currently provides three capabilities:
 
 1. **LLM Analytics for pi** — captures generations, tool executions, and traces as structured `$ai_*` events in PostHog.
 2. **PostHog MCP bridge for pi** — connects pi to the PostHog MCP server and dynamically exposes PostHog MCP tools inside pi.
+3. **Bundled PostHog skills for pi** — ships PostHog skills from [`PostHog/ai-plugin`](https://github.com/PostHog/ai-plugin) as native pi skills.
 
 ## Install
 
@@ -57,6 +58,20 @@ Set your project API key:
 export POSTHOG_API_KEY="phc_your_project_key"
 pi
 ```
+
+## PostHog skills for pi
+
+`@posthog/pi` bundles PostHog skills from the separate [`PostHog/ai-plugin`](https://github.com/PostHog/ai-plugin) repository and exposes them as native pi skills.
+
+That means a pi user who installs `@posthog/pi` gets:
+
+- PostHog MCP tools
+- bundled PostHog skills
+- optional pi tracing/observability
+
+with a single package install.
+
+The bundled `skills/` directory in this repo is synced from `ai-plugin`, and a scheduled GitHub workflow keeps it up to date.
 
 ## Configuration
 
@@ -232,6 +247,18 @@ keep spill-to-file enabled (the default) or set it explicitly:
 export POSTHOG_MCP_SPILL_TO_FILE="true"
 export POSTHOG_MCP_MAX_INLINE_CHARS="12000"
 export POSTHOG_MCP_TEMP_DIR="/tmp/posthog-mcp"
+```
+
+To refresh the bundled PostHog skills from a local `../ai-plugin` checkout:
+
+```bash
+pnpm sync:skills
+```
+
+You can also point the sync script at another checkout:
+
+```bash
+AI_PLUGIN_DIR=/path/to/ai-plugin pnpm sync:skills
 ```
 
 ### Development commands

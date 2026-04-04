@@ -25,6 +25,7 @@
     "packageManager": "pnpm@10.12.1",
     "files": [
         "src",
+        "skills",
         "!src/**/*.test.ts"
     ],
     "dependencies": {
@@ -49,6 +50,9 @@
     "pi": {
         "extensions": [
             "./src/index.ts"
+        ],
+        "skills": [
+            "./skills"
         ]
     },
     "scripts": {
@@ -57,6 +61,7 @@
         "typecheck": "tsc --noEmit",
         "lint": "oxlint src/ && oxfmt --check .",
         "lint:fix": "oxlint --fix src/ && oxfmt --write .",
-        "changeset": "changeset"
+        "changeset": "changeset",
+        "sync:skills": "bash ./scripts/sync-skills.sh"
     }
 }
