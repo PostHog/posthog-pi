@@ -1,7 +1,7 @@
 {
     "name": "@posthog/pi",
     "version": "0.1.1",
-    "description": "PostHog LLM Analytics extension for pi coding agent",
+    "description": "PostHog MCP + LLM analytics extension package for pi coding agent",
     "type": "module",
     "license": "MIT",
     "author": "PostHog",
@@ -12,7 +12,8 @@
         "llm",
         "observability",
         "tracing",
-        "analytics"
+        "analytics",
+        "mcp"
     ],
     "repository": {
         "type": "git",
@@ -27,6 +28,8 @@
         "!src/**/*.test.ts"
     ],
     "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0",
+        "@sinclair/typebox": "^0.34.49",
         "posthog-node": "^5.0.0"
     },
     "peerDependencies": {
