@@ -69,8 +69,8 @@ export function registerPostHogMcpExtension(pi: ExtensionAPI) {
                 registerTools(response.tools, ctx)
                 registered = true
                 lastError = null
-                setStatus(`PostHog MCP: ${response.tools.length} tools`, ctx)
-                ctx?.ui?.notify(`PostHog MCP connected (${response.tools.length} tools)`, 'info')
+                setStatus(`PostHog MCP: ${registeredToolNames.size} tools`, ctx)
+                ctx?.ui?.notify(`PostHog MCP connected (${registeredToolNames.size} tools)`, 'info')
             } catch (error) {
                 await nextClient.close().catch(() => undefined)
                 lastError = error instanceof Error ? error.message : String(error)
@@ -85,8 +85,13 @@ export function registerPostHogMcpExtension(pi: ExtensionAPI) {
     }
 
     function registerTools(tools: McpTool[], ctx?: ExtensionContext | ExtensionCommandContext) {
+        const toolAllowlist = config.tools.length > 0 ? new Set(config.tools) : null
+
         for (const tool of tools) {
             if (!MCP_TOOL_NAME_RE.test(tool.name)) {
+                continue
+            }
+            if (toolAllowlist && !toolAllowlist.has(tool.name)) {
                 continue
             }
             if (registeredToolNames.has(tool.name)) {
@@ -113,7 +118,7 @@ export function registerPostHogMcpExtension(pi: ExtensionAPI) {
                         arguments: params as Record<string, unknown>,
                     })
 
-                    return await formatMcpToolResult({
+                    const formatted = await formatMcpToolResult({
                         toolName: tool.name,
                         result: {
                             content: result.content as unknown[] | undefined,
@@ -122,6 +127,13 @@ export function registerPostHogMcpExtension(pi: ExtensionAPI) {
                         },
                         config,
                     })
+
+                    if (result.isError) {
+                        const errorText = formatted.content.map((c) => c.text).join('\n')
+                        throw new Error(`PostHog MCP tool ${tool.name} failed: ${errorText}`)
+                    }
+
+                    return formatted
                 },
             })
         }
