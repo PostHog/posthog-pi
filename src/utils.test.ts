@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { redactForPrivacy, safeStringify, serializeAttribute, getProjectName, getAgentName } from './utils.js'
+import {
+    buildPostHogMcpUrl,
+    formatMcpToolResult,
+    getAgentName,
+    getPostHogAuthHeader,
+    getProjectName,
+    jsonSchemaToTypeBox,
+    redactForPrivacy,
+    safeStringify,
+    serializeAttribute,
+    stringifyMcpContent,
+} from './utils.js'
 
 describe('redactForPrivacy', () => {
     it('returns value when privacy mode is off', () => {
@@ -128,5 +139,93 @@ describe('getAgentName', () => {
 
     it('ignores empty config value', () => {
         expect(getAgentName('', 'my-proj')).toBe('my-proj')
+    })
+})
+
+describe('getPostHogAuthHeader', () => {
+    it('prefers POSTHOG_AUTH_HEADER', () => {
+        expect(getPostHogAuthHeader({ POSTHOG_AUTH_HEADER: 'Bearer abc', POSTHOG_PERSONAL_API_KEY: 'phx_123' })).toBe(
+            'Bearer abc'
+        )
+    })
+
+    it('builds bearer header from personal API key', () => {
+        expect(getPostHogAuthHeader({ POSTHOG_PERSONAL_API_KEY: 'phx_123' })).toBe('Bearer phx_123')
+    })
+
+    it('returns null when auth is missing', () => {
+        expect(getPostHogAuthHeader({})).toBeNull()
+    })
+})
+
+describe('buildPostHogMcpUrl', () => {
+    it('adds features and tools filters', () => {
+        expect(
+            buildPostHogMcpUrl({
+                enabled: true,
+                url: 'https://mcp.posthog.com/mcp',
+                version: 2,
+                features: ['sql', 'flags'],
+                tools: ['dashboard-get'],
+                maxInlineChars: 12000,
+                spillToFile: true,
+                tempDir: '/tmp/posthog-mcp-test',
+            })
+        ).toBe('https://mcp.posthog.com/mcp?features=sql%2Cflags&tools=dashboard-get')
+    })
+})
+
+describe('stringifyMcpContent', () => {
+    it('joins text content into one text block', () => {
+        expect(
+            stringifyMcpContent([
+                { type: 'text', text: 'hello' },
+                { type: 'text', text: 'world' },
+            ])
+        ).toEqual([{ type: 'text', text: 'hello\n\nworld' }])
+    })
+})
+
+describe('jsonSchemaToTypeBox', () => {
+    it('converts object schemas and preserves required fields', () => {
+        const result = jsonSchemaToTypeBox({
+            type: 'object',
+            properties: {
+                query: { type: 'string', description: 'Query text' },
+                limit: { type: 'integer' },
+            },
+            required: ['query'],
+        })
+
+        expect(result.type).toBe('object')
+        expect(result.required).toContain('query')
+        expect(result.required).not.toContain('limit')
+        expect(result.properties?.query).toMatchObject({ type: 'string', description: 'Query text' })
+    })
+})
+
+describe('formatMcpToolResult', () => {
+    it('keeps small results inline', async () => {
+        const result = await formatMcpToolResult({
+            toolName: 'feature-flag-get-all',
+            result: { content: [{ type: 'text', text: 'small result' }], isError: false },
+            config: { spillToFile: true, maxInlineChars: 1000, tempDir: '/tmp/posthog-mcp-test' },
+        })
+
+        expect(result.details.spilledToFile).toBe(false)
+        expect(result.content[0].text).toContain('small result')
+    })
+
+    it('spills large results to a temp file', async () => {
+        const result = await formatMcpToolResult({
+            toolName: 'execute-sql',
+            result: { content: [{ type: 'text', text: 'x'.repeat(2000) }], isError: false },
+            config: { spillToFile: true, maxInlineChars: 200, tempDir: '/tmp/posthog-mcp-test' },
+        })
+
+        expect(result.details.spilledToFile).toBe(true)
+        expect(result.details.filePath).toContain('/tmp/posthog-mcp-test/')
+        expect(result.content[0].text).toContain('saved to:')
+        expect(result.content[0].text).toContain('Use the read tool')
     })
 })

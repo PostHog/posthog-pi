@@ -15,6 +15,17 @@ export interface PostHogPiConfig {
     maxAttributeLength: number
 }
 
+export interface PostHogMcpConfig {
+    enabled: boolean
+    url: string
+    version: number
+    features: string[]
+    tools: string[]
+    maxInlineChars: number
+    spillToFile: boolean
+    tempDir: string
+}
+
 export interface LastAssistantInfo {
     stopReason?: string
     errorMessage?: string

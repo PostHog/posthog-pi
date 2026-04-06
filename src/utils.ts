@@ -1,4 +1,9 @@
-import { basename, dirname } from 'node:path'
+import { Type, type TSchema } from '@sinclair/typebox'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { randomUUID } from 'node:crypto'
+import type { PostHogMcpConfig } from './types.js'
 
 export function redactForPrivacy<T>(value: T, privacyMode: boolean): T | null {
     return privacyMode ? null : value
@@ -120,4 +125,199 @@ export function getAgentName(configAgentName: string | undefined, projectName: s
     const subagentName = detectSubagentName()
     if (subagentName) return `${projectName}/${subagentName}`
     return projectName
+}
+
+export function getPostHogAuthHeader(env: NodeJS.ProcessEnv): string | null {
+    const authHeader = env.POSTHOG_AUTH_HEADER?.trim()
+    if (authHeader) return authHeader
+
+    const apiKey = env.POSTHOG_PERSONAL_API_KEY?.trim()
+    if (!apiKey) return null
+    return apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`
+}
+
+export function buildPostHogMcpUrl(config: PostHogMcpConfig): string {
+    const url = new URL(config.url)
+    if (config.features.length > 0) {
+        url.searchParams.set('features', config.features.join(','))
+    }
+    if (config.tools.length > 0) {
+        url.searchParams.set('tools', config.tools.join(','))
+    }
+    return url.toString()
+}
+
+export function stringifyMcpContent(content: unknown[] | undefined): Array<{ type: 'text'; text: string }> {
+    if (!content || content.length === 0) {
+        return [{ type: 'text', text: 'PostHog MCP tool returned no content.' }]
+    }
+
+    const parts = content.map((item) => {
+        if (!item || typeof item !== 'object') return safeStringify(item) ?? ''
+        const typedItem = item as { type?: string; text?: string; data?: string; mimeType?: string }
+        if (typedItem.type === 'text' && typeof typedItem.text === 'string') {
+            return typedItem.text
+        }
+        if (typedItem.type === 'image' && typeof typedItem.mimeType === 'string') {
+            return `[image content: ${typedItem.mimeType}]`
+        }
+        return safeStringify(item) ?? ''
+    })
+
+    return [{ type: 'text', text: parts.filter(Boolean).join('\n\n') }]
+}
+
+export interface FormattedMcpToolResult {
+    content: Array<{ type: 'text'; text: string }>
+    details: {
+        isError: boolean
+        structuredContent: unknown
+        content: unknown
+        spilledToFile: boolean
+        filePath: string | null
+        preview: string | null
+        serializedLength: number
+    }
+}
+
+export async function formatMcpToolResult(options: {
+    toolName: string
+    result: { content?: unknown[]; structuredContent?: unknown; isError?: boolean }
+    config: Pick<PostHogMcpConfig, 'spillToFile' | 'maxInlineChars' | 'tempDir'>
+}): Promise<FormattedMcpToolResult> {
+    const inlineContent = stringifyMcpContent(options.result.content)
+    const inlineText = inlineContent.map((part) => part.text).join('\n\n')
+    const serializedPayload = JSON.stringify(
+        {
+            tool: options.toolName,
+            timestamp: new Date().toISOString(),
+            isError: options.result.isError ?? false,
+            content: options.result.content ?? [],
+            structuredContent: options.result.structuredContent ?? null,
+        },
+        null,
+        2
+    )
+    const serializedLength = serializedPayload.length
+
+    if (!options.config.spillToFile || serializedLength <= options.config.maxInlineChars) {
+        return {
+            content: inlineContent,
+            details: {
+                isError: options.result.isError ?? false,
+                structuredContent: options.result.structuredContent ?? null,
+                content: options.result.content ?? null,
+                spilledToFile: false,
+                filePath: null,
+                preview: inlineText || null,
+                serializedLength,
+            },
+        }
+    }
+
+    const filePath = await spillMcpResultToFile(options.config.tempDir, options.toolName, serializedPayload)
+    const preview = truncate(
+        inlineText || '[No inline text preview available]',
+        Math.min(options.config.maxInlineChars, 4000)
+    )
+
+    return {
+        content: [
+            {
+                type: 'text',
+                text: [
+                    `PostHog MCP tool \`${options.toolName}\` returned a large result, so it was saved to:`,
+                    filePath,
+                    '',
+                    `Preview (${serializedLength} chars total):`,
+                    preview,
+                    '',
+                    'Use the read tool to inspect the saved file if you need the full result.',
+                ].join('\n'),
+            },
+        ],
+        details: {
+            isError: options.result.isError ?? false,
+            structuredContent: options.result.structuredContent ?? null,
+            content: options.result.content ?? null,
+            spilledToFile: true,
+            filePath,
+            preview,
+            serializedLength,
+        },
+    }
+}
+
+async function spillMcpResultToFile(baseDir: string, toolName: string, serializedPayload: string): Promise<string> {
+    const dir = baseDir || join(tmpdir(), 'posthog-mcp')
+    await mkdir(dir, { recursive: true })
+
+    const safeToolName = toolName.replace(/[^a-zA-Z0-9_-]/g, '_')
+    const filePath = join(dir, `${safeToolName}-${Date.now()}-${randomUUID().slice(0, 8)}.json`)
+    await writeFile(filePath, serializedPayload, 'utf8')
+    return filePath
+}
+
+export function jsonSchemaToTypeBox(schema: unknown): TSchema {
+    if (!schema || typeof schema !== 'object') {
+        return Type.Object({}, { additionalProperties: true })
+    }
+
+    const typedSchema = schema as {
+        type?: string | string[]
+        description?: string
+        properties?: Record<string, unknown>
+        required?: string[]
+        items?: unknown
+        enum?: unknown[]
+        anyOf?: unknown[]
+        oneOf?: unknown[]
+    }
+
+    if (Array.isArray(typedSchema.anyOf) && typedSchema.anyOf.length > 0) {
+        return Type.Union(typedSchema.anyOf.map((entry) => jsonSchemaToTypeBox(entry)))
+    }
+
+    if (Array.isArray(typedSchema.oneOf) && typedSchema.oneOf.length > 0) {
+        return Type.Union(typedSchema.oneOf.map((entry) => jsonSchemaToTypeBox(entry)))
+    }
+
+    const schemaType = Array.isArray(typedSchema.type) ? typedSchema.type[0] : typedSchema.type
+
+    if (Array.isArray(typedSchema.enum) && typedSchema.enum.every((value) => typeof value === 'string')) {
+        return Type.Union(
+            typedSchema.enum.map((value) => Type.Literal(value)),
+            {
+                description: typedSchema.description,
+            }
+        )
+    }
+
+    switch (schemaType) {
+        case 'string':
+            return Type.String({ description: typedSchema.description })
+        case 'number':
+            return Type.Number({ description: typedSchema.description })
+        case 'integer':
+            return Type.Integer({ description: typedSchema.description })
+        case 'boolean':
+            return Type.Boolean({ description: typedSchema.description })
+        case 'array':
+            return Type.Array(jsonSchemaToTypeBox(typedSchema.items), { description: typedSchema.description })
+        case 'object': {
+            const required = new Set(typedSchema.required ?? [])
+            const properties = Object.fromEntries(
+                Object.entries(typedSchema.properties ?? {}).map(([key, value]) => {
+                    const converted = jsonSchemaToTypeBox(value)
+                    return [key, required.has(key) ? converted : Type.Optional(converted)]
+                })
+            )
+            return Type.Object(properties, {
+                description: typedSchema.description,
+                additionalProperties: true,
+            })
+        }
+        default:
+            return Type.Object({}, { description: typedSchema.description, additionalProperties: true })
+    }
 }
