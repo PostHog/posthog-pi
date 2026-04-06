@@ -15,7 +15,8 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
     const privacyMode =
         process.env.POSTHOG_PRIVACY_MODE === 'true' ||
         (file.privacyMode === true && process.env.POSTHOG_PRIVACY_MODE === undefined)
-    const enabled = process.env.POSTHOG_ENABLED !== 'false' && file.enabled !== false
+    const enabled =
+        process.env.POSTHOG_ENABLED !== undefined ? process.env.POSTHOG_ENABLED !== 'false' : file.enabled !== false
     const traceGrouping =
         (process.env.POSTHOG_TRACE_GROUPING as 'message' | 'session') ?? file.traceGrouping ?? 'message'
     const sessionWindowMinutes =

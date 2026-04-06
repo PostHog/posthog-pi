@@ -192,7 +192,10 @@ function readMcpConfig(): PostHogMcpConfig {
     const file = readConfigFile()
     const mcp = file.mcp ?? {}
 
-    const enabled = process.env.POSTHOG_MCP_ENABLED !== 'false' && mcp.enabled !== false
+    const enabled =
+        process.env.POSTHOG_MCP_ENABLED !== undefined
+            ? process.env.POSTHOG_MCP_ENABLED !== 'false'
+            : mcp.enabled !== false
     const url = process.env.POSTHOG_MCP_URL ?? mcp.url ?? 'https://mcp.posthog.com/mcp'
     const version = parseInt(process.env.POSTHOG_MCP_VERSION ?? '', 10) || (mcp.version ?? 2)
     const features = process.env.POSTHOG_MCP_FEATURES
@@ -200,7 +203,10 @@ function readMcpConfig(): PostHogMcpConfig {
         : (mcp.features ?? [])
     const tools = process.env.POSTHOG_MCP_TOOLS ? splitCsv(process.env.POSTHOG_MCP_TOOLS) : (mcp.tools ?? [])
     const maxInlineChars = parseInt(process.env.POSTHOG_MCP_MAX_INLINE_CHARS ?? '', 10) || (mcp.maxInlineChars ?? 12000)
-    const spillToFile = process.env.POSTHOG_MCP_SPILL_TO_FILE !== 'false' && mcp.spillToFile !== false
+    const spillToFile =
+        process.env.POSTHOG_MCP_SPILL_TO_FILE !== undefined
+            ? process.env.POSTHOG_MCP_SPILL_TO_FILE !== 'false'
+            : mcp.spillToFile !== false
     const tempDir = process.env.POSTHOG_MCP_TEMP_DIR ?? mcp.tempDir ?? '/tmp/posthog-mcp'
 
     return {
