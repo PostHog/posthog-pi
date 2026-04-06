@@ -2,22 +2,29 @@ import type { ExtensionAPI } from '@mariozechner/pi-coding-agent'
 import { randomUUID } from 'node:crypto'
 import { buildAiGeneration, buildAiSpan, buildAiTrace } from './events.js'
 import type { LastAssistantInfo, PostHogPiConfig, TurnState } from './types.js'
-import { getAgentName, getProjectName, safeStringify } from './utils.js'
+import { getAgentName, getProjectName, readConfigFile, safeStringify } from './utils.js'
 
 const DEFAULT_HOST = 'https://us.i.posthog.com'
 
 export function registerAnalyticsExtension(pi: ExtensionAPI) {
-    // Read config from environment variables
-    const apiKey = process.env.POSTHOG_API_KEY ?? ''
-    const host = process.env.POSTHOG_HOST ?? DEFAULT_HOST
-    const privacyMode = process.env.POSTHOG_PRIVACY_MODE === 'true'
-    const enabled = process.env.POSTHOG_ENABLED !== 'false'
-    const traceGrouping = (process.env.POSTHOG_TRACE_GROUPING as 'message' | 'session') ?? 'message'
-    const sessionWindowMinutes = parseInt(process.env.POSTHOG_SESSION_WINDOW_MINUTES ?? '60', 10) || 60
-    const maxAttributeLength = parseInt(process.env.POSTHOG_MAX_ATTRIBUTE_LENGTH ?? '12000', 10) || 12000
+    // Read config file (env vars always take precedence)
+    const file = readConfigFile()
 
-    // Parse custom tags from POSTHOG_TAGS env (format: "key1:val1,key2:val2")
-    const tags: Record<string, string> = {}
+    const apiKey = process.env.POSTHOG_API_KEY ?? file.apiKey ?? ''
+    const host = process.env.POSTHOG_HOST ?? file.host ?? DEFAULT_HOST
+    const privacyMode =
+        process.env.POSTHOG_PRIVACY_MODE === 'true' ||
+        (file.privacyMode === true && process.env.POSTHOG_PRIVACY_MODE === undefined)
+    const enabled = process.env.POSTHOG_ENABLED !== 'false' && file.enabled !== false
+    const traceGrouping =
+        (process.env.POSTHOG_TRACE_GROUPING as 'message' | 'session') ?? file.traceGrouping ?? 'message'
+    const sessionWindowMinutes =
+        parseInt(process.env.POSTHOG_SESSION_WINDOW_MINUTES ?? '', 10) || (file.sessionWindowMinutes ?? 60)
+    const maxAttributeLength =
+        parseInt(process.env.POSTHOG_MAX_ATTRIBUTE_LENGTH ?? '', 10) || (file.maxAttributeLength ?? 12000)
+
+    // Parse custom tags from POSTHOG_TAGS env (format: "key1:val1,key2:val2"), merge with file tags
+    const tags: Record<string, string> = { ...file.tags }
     const tagsEnv = process.env.POSTHOG_TAGS
     if (tagsEnv) {
         for (const pair of tagsEnv.split(',')) {
@@ -39,8 +46,8 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
         enabled,
         traceGrouping,
         sessionWindowMinutes,
-        projectName: process.env.POSTHOG_PROJECT_NAME,
-        agentName: process.env.POSTHOG_AGENT_NAME,
+        projectName: process.env.POSTHOG_PROJECT_NAME ?? file.projectName,
+        agentName: process.env.POSTHOG_AGENT_NAME ?? file.agentName,
         tags,
         maxAttributeLength,
     }
