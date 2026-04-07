@@ -6,6 +6,93 @@ import { getAgentName, getProjectName, readConfigFile, safeStringify } from './u
 
 const DEFAULT_HOST = 'https://us.i.posthog.com'
 
+interface DiscoveredIdentity {
+    distinctId: string
+    properties: Record<string, unknown>
+}
+
+function toPostHogAppHost(ingestOrAppHost: string): string {
+    try {
+        const url = new URL(ingestOrAppHost)
+        if (url.hostname === 'us.i.posthog.com') return 'https://us.posthog.com'
+        if (url.hostname === 'eu.i.posthog.com') return 'https://eu.posthog.com'
+        if (url.hostname.startsWith('i.')) {
+            url.hostname = url.hostname.slice(2)
+        }
+        return `${url.protocol}//${url.host}`
+    } catch {
+        return 'https://us.posthog.com'
+    }
+}
+
+function asNonEmptyString(value: unknown): string | undefined {
+    if (typeof value === 'string' && value.trim().length > 0) return value.trim()
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+    return undefined
+}
+
+function extractIdentityFromUserResponse(payload: unknown): DiscoveredIdentity | null {
+    if (!payload || typeof payload !== 'object') return null
+
+    const candidates = [
+        payload,
+        (payload as { user?: unknown }).user,
+        (payload as { results?: unknown[] }).results?.[0],
+    ].filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+
+    for (const candidate of candidates) {
+        const distinctId =
+            asNonEmptyString(candidate.distinct_id) ??
+            asNonEmptyString(candidate.distinctId) ??
+            asNonEmptyString(candidate.uuid) ??
+            asNonEmptyString(candidate.id) ??
+            asNonEmptyString(candidate.email)
+
+        if (!distinctId) continue
+
+        const properties: Record<string, unknown> = {}
+        const email = asNonEmptyString(candidate.email)
+        if (email) properties.email = email
+
+        const firstName = asNonEmptyString(candidate.first_name)
+        const lastName = asNonEmptyString(candidate.last_name)
+        const fullName = [firstName, lastName].filter(Boolean).join(' ').trim()
+        const name = fullName || asNonEmptyString(candidate.name)
+        if (name) properties.name = name
+
+        return { distinctId, properties }
+    }
+
+    return null
+}
+
+async function discoverIdentityFromPersonalApiKey(
+    personalApiKey: string,
+    ingestOrAppHost: string
+): Promise<DiscoveredIdentity | null> {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 1500)
+
+    try {
+        const response = await fetch(`${toPostHogAppHost(ingestOrAppHost)}/api/users/@me/`, {
+            method: 'GET',
+            headers: {
+                Authorization: personalApiKey.startsWith('Bearer ') ? personalApiKey : `Bearer ${personalApiKey}`,
+                Accept: 'application/json',
+            },
+            signal: controller.signal,
+        })
+
+        if (!response.ok) return null
+        const payload = (await response.json()) as unknown
+        return extractIdentityFromUserResponse(payload)
+    } catch {
+        return null
+    } finally {
+        clearTimeout(timeout)
+    }
+}
+
 export function getIdentifyProperties(distinctId: string): Record<string, unknown> {
     const properties: Record<string, unknown> = {}
     if (distinctId.includes('@') && !distinctId.includes(' ')) {
@@ -31,7 +118,8 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
         parseInt(process.env.POSTHOG_SESSION_WINDOW_MINUTES ?? '', 10) || (file.sessionWindowMinutes ?? 60)
     const maxAttributeLength =
         parseInt(process.env.POSTHOG_MAX_ATTRIBUTE_LENGTH ?? '', 10) || (file.maxAttributeLength ?? 12000)
-    const distinctId = process.env.POSTHOG_DISTINCT_ID ?? file.distinctId
+    const configuredDistinctId = process.env.POSTHOG_DISTINCT_ID ?? file.distinctId
+    const personalApiKey = (process.env.POSTHOG_PERSONAL_API_KEY ?? file.personalApiKey)?.trim() || null
 
     // Parse custom tags from POSTHOG_TAGS env (format: "key1:val1,key2:val2"), merge with file tags
     const tags: Record<string, string> = { ...file.tags }
@@ -60,7 +148,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
         agentName: process.env.POSTHOG_AGENT_NAME ?? file.agentName,
         tags,
         maxAttributeLength,
-        distinctId,
+        distinctId: configuredDistinctId,
     }
 
     if (!config.enabled) return
@@ -77,6 +165,9 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
 
     // State
     let client: import('posthog-node').PostHog | null = null
+    let resolvedDistinctId = configuredDistinctId
+    let resolvedIdentifyProperties = resolvedDistinctId ? getIdentifyProperties(resolvedDistinctId) : {}
+    let identityDiscoveryPromise: Promise<void> | null = null
 
     /** Current turn state (one LLM call) */
     const turns = new Map<number, TurnState>()
@@ -157,17 +248,41 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
         }
     }
 
+    async function ensureResolvedIdentity(): Promise<void> {
+        if (resolvedDistinctId || !personalApiKey) return
+        if (identityDiscoveryPromise) {
+            await identityDiscoveryPromise
+            return
+        }
+
+        identityDiscoveryPromise = (async () => {
+            const discovered = await discoverIdentityFromPersonalApiKey(personalApiKey, host)
+            if (!discovered) return
+            resolvedDistinctId = discovered.distinctId
+            resolvedIdentifyProperties = {
+                ...getIdentifyProperties(discovered.distinctId),
+                ...discovered.properties,
+            }
+        })().finally(() => {
+            identityDiscoveryPromise = null
+        })
+
+        await identityDiscoveryPromise
+    }
+
     // Initialize client on session start
     pi.on('session_start', async () => {
         const phClient = await ensureClient()
         if (!phClient) return
 
-        // If a distinct_id is configured, identify the person up-front so traces
-        // are attached to a stable PostHog person profile.
-        if (distinctId) {
+        // If explicit distinct_id is not configured, try to auto-discover identity
+        // from the PostHog personal API key.
+        await ensureResolvedIdentity()
+
+        if (resolvedDistinctId) {
             phClient.identify({
-                distinctId,
-                properties: getIdentifyProperties(distinctId),
+                distinctId: resolvedDistinctId,
+                properties: resolvedIdentifyProperties,
             })
         }
     })
@@ -366,7 +481,14 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
             }
 
             // Build and send generation event
-            const generation = buildAiGeneration(turnState, assistantInfo, config, projectName, agentName, distinctId)
+            const generation = buildAiGeneration(
+                turnState,
+                assistantInfo,
+                config,
+                projectName,
+                agentName,
+                resolvedDistinctId
+            )
 
             phClient.capture({
                 distinctId: generation.distinctId,
@@ -407,7 +529,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
             projectName,
             agentName,
             sessionId,
-            distinctId
+            resolvedDistinctId
         )
 
         phClient.capture({
@@ -449,7 +571,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
             projectName,
             agentName,
             sessionId,
-            distinctId
+            resolvedDistinctId
         )
 
         phClient.capture({
@@ -490,5 +612,8 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
         agentStartTime = undefined
         agentRunCounter = 0
         lastUserPrompt = undefined
+        resolvedDistinctId = configuredDistinctId
+        resolvedIdentifyProperties = resolvedDistinctId ? getIdentifyProperties(resolvedDistinctId) : {}
+        identityDiscoveryPromise = null
     })
 }
