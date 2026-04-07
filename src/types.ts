@@ -11,6 +11,8 @@ export interface PostHogPiConfig {
     agentName?: string
     /** Custom tags/properties added to all events */
     tags: Record<string, string>
+    /** Override event distinct_id (defaults to session id) */
+    distinctId?: string
     /** Max length for serialized tool input/output attributes */
     maxAttributeLength: number
 }

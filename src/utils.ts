@@ -14,7 +14,8 @@ import type { PostHogMcpConfig } from './types.js'
  * {
  *   "apiKey": "phc_...",
  *   "personalApiKey": "phx_...",
- *   "host": "https://us.i.posthog.com"
+ *   "host": "https://us.i.posthog.com",
+ *   "distinctId": "user@example.com"
  * }
  */
 export interface PostHogConfigFile {
@@ -28,6 +29,8 @@ export interface PostHogConfigFile {
     projectName?: string
     agentName?: string
     tags?: Record<string, string>
+    /** Override event distinct_id (defaults to session id) */
+    distinctId?: string
     maxAttributeLength?: number
     mcp?: {
         enabled?: boolean

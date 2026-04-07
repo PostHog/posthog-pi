@@ -39,14 +39,15 @@ export function buildAiGeneration(
     assistantInfo: LastAssistantInfo,
     config: PostHogPiConfig,
     projectName: string,
-    agentName: string
+    agentName: string,
+    configuredDistinctId?: string
 ): AiGenerationEvent {
     // Use actual LLM latency if available, otherwise fall back to turn latency
     const latency =
         assistantInfo.llmLatencyMs !== undefined
             ? assistantInfo.llmLatencyMs / 1000
             : (Date.now() - turnState.startTime) / 1000
-    const distinctId = turnState.sessionId ?? 'pi-agent'
+    const distinctId = configuredDistinctId ?? turnState.sessionId ?? 'pi-agent'
 
     // Format input messages for PostHog
     const inputMessages = redactForPrivacy(turnState.input, config.privacyMode)
@@ -107,9 +108,10 @@ export function buildAiSpan(
     config: PostHogPiConfig,
     projectName: string,
     agentName: string,
-    sessionId?: string
+    sessionId?: string,
+    configuredDistinctId?: string
 ): AiSpanEvent {
-    const distinctId = sessionId ?? 'pi-agent'
+    const distinctId = configuredDistinctId ?? sessionId ?? 'pi-agent'
     const spanId = randomUUID()
     const latency = durationMs !== null ? durationMs / 1000 : null
 
@@ -146,9 +148,10 @@ export function buildAiTrace(
     config: PostHogPiConfig,
     projectName: string,
     agentName: string,
-    sessionId?: string
+    sessionId?: string,
+    configuredDistinctId?: string
 ): AiTraceEvent {
-    const distinctId = sessionId ?? 'pi-agent'
+    const distinctId = configuredDistinctId ?? sessionId ?? 'pi-agent'
     const latency = latencyMs !== null ? latencyMs / 1000 : null
 
     return {

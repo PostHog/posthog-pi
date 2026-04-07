@@ -6,6 +6,14 @@ import { getAgentName, getProjectName, readConfigFile, safeStringify } from './u
 
 const DEFAULT_HOST = 'https://us.i.posthog.com'
 
+export function getIdentifyProperties(distinctId: string): Record<string, unknown> {
+    const properties: Record<string, unknown> = {}
+    if (distinctId.includes('@') && !distinctId.includes(' ')) {
+        properties.email = distinctId
+    }
+    return properties
+}
+
 export function registerAnalyticsExtension(pi: ExtensionAPI) {
     // Read config file (env vars always take precedence)
     const file = readConfigFile()
@@ -23,6 +31,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
         parseInt(process.env.POSTHOG_SESSION_WINDOW_MINUTES ?? '', 10) || (file.sessionWindowMinutes ?? 60)
     const maxAttributeLength =
         parseInt(process.env.POSTHOG_MAX_ATTRIBUTE_LENGTH ?? '', 10) || (file.maxAttributeLength ?? 12000)
+    const distinctId = process.env.POSTHOG_DISTINCT_ID ?? file.distinctId
 
     // Parse custom tags from POSTHOG_TAGS env (format: "key1:val1,key2:val2"), merge with file tags
     const tags: Record<string, string> = { ...file.tags }
@@ -51,6 +60,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
         agentName: process.env.POSTHOG_AGENT_NAME ?? file.agentName,
         tags,
         maxAttributeLength,
+        distinctId,
     }
 
     if (!config.enabled) return
@@ -149,7 +159,17 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
 
     // Initialize client on session start
     pi.on('session_start', async () => {
-        await ensureClient()
+        const phClient = await ensureClient()
+        if (!phClient) return
+
+        // If a distinct_id is configured, identify the person up-front so traces
+        // are attached to a stable PostHog person profile.
+        if (distinctId) {
+            phClient.identify({
+                distinctId,
+                properties: getIdentifyProperties(distinctId),
+            })
+        }
     })
 
     // Track model changes
@@ -346,7 +366,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
             }
 
             // Build and send generation event
-            const generation = buildAiGeneration(turnState, assistantInfo, config, projectName, agentName)
+            const generation = buildAiGeneration(turnState, assistantInfo, config, projectName, agentName, distinctId)
 
             phClient.capture({
                 distinctId: generation.distinctId,
@@ -386,7 +406,8 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
             config,
             projectName,
             agentName,
-            sessionId
+            sessionId,
+            distinctId
         )
 
         phClient.capture({
@@ -427,7 +448,8 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
             config,
             projectName,
             agentName,
-            sessionId
+            sessionId,
+            distinctId
         )
 
         phClient.capture({
