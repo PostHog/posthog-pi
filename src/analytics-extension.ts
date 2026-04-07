@@ -347,9 +347,14 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
                 if ('role' in msg) {
                     const role = msg.role
                     if (role === 'user') {
+                        const userContent =
+                            typeof msg.content === 'string' || Array.isArray(msg.content)
+                                ? msg.content
+                                : safeStringify(msg.content)
+
                         return {
                             role: 'user',
-                            content: typeof msg.content === 'string' ? msg.content : safeStringify(msg.content),
+                            content: userContent,
                         }
                     }
                     if (role === 'assistant') {
