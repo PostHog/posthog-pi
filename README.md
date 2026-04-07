@@ -94,19 +94,19 @@ export POSTHOG_MCP_MAX_INLINE_CHARS="12000"
 
 ### LLM analytics / tracing
 
-| Variable                         | Default                    | Description                                                                                        |
-| -------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------- |
-| `POSTHOG_API_KEY`                | _(required for tracing)_   | Your PostHog project API key                                                                       |
-| `POSTHOG_HOST`                   | `https://us.i.posthog.com` | PostHog instance URL                                                                               |
-| `POSTHOG_PRIVACY_MODE`           | `false`                    | When `true`, LLM input/output content is not sent to PostHog                                       |
-| `POSTHOG_ENABLED`                | `true`                     | Set to `false` to disable analytics capture                                                        |
-| `POSTHOG_TRACE_GROUPING`         | `message`                  | `message`: one trace per user prompt. `session`: group all generations in a session into one trace |
-| `POSTHOG_SESSION_WINDOW_MINUTES` | `60`                       | Minutes of inactivity before starting a new session window                                         |
-| `POSTHOG_PROJECT_NAME`           | cwd basename               | Project name included in all events                                                                |
-| `POSTHOG_AGENT_NAME`             | project name               | Agent name (auto-detects subagent names from pi-subagents)                                         |
+| Variable                         | Default                    | Description                                                                                                                                            |
+| -------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POSTHOG_API_KEY`                | _(required for tracing)_   | Your PostHog project API key                                                                                                                           |
+| `POSTHOG_HOST`                   | `https://us.i.posthog.com` | PostHog instance URL                                                                                                                                   |
+| `POSTHOG_PRIVACY_MODE`           | `false`                    | When `true`, LLM input/output content is not sent to PostHog                                                                                           |
+| `POSTHOG_ENABLED`                | `true`                     | Set to `false` to disable analytics capture                                                                                                            |
+| `POSTHOG_TRACE_GROUPING`         | `message`                  | `message`: one trace per user prompt. `session`: group all generations in a session into one trace                                                     |
+| `POSTHOG_SESSION_WINDOW_MINUTES` | `60`                       | Minutes of inactivity before starting a new session window                                                                                             |
+| `POSTHOG_PROJECT_NAME`           | cwd basename               | Project name included in all events                                                                                                                    |
+| `POSTHOG_AGENT_NAME`             | project name               | Agent name (auto-detects subagent names from pi-subagents)                                                                                             |
 | `POSTHOG_DISTINCT_ID`            | session id (`pi:...`)      | Override `distinct_id` used for all `$ai_*` events (for example `user@example.com`). When set, the extension also calls `identify()` on session start. |
-| `POSTHOG_TAGS`                   | _(none)_                   | Custom tags added to all events (format: `key1:val1,key2:val2`)                                    |
-| `POSTHOG_MAX_ATTRIBUTE_LENGTH`   | `12000`                    | Max length for serialized tool input/output attributes                                             |
+| `POSTHOG_TAGS`                   | _(none)_                   | Custom tags added to all events (format: `key1:val1,key2:val2`)                                                                                        |
+| `POSTHOG_MAX_ATTRIBUTE_LENGTH`   | `12000`                    | Max length for serialized tool input/output attributes                                                                                                 |
 
 When `POSTHOG_DISTINCT_ID` is set, `@posthog/pi` calls `identify()` once on session start for that distinct ID. If the value looks like an email address, it is also sent as the `email` person property.
 

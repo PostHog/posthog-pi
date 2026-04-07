@@ -150,7 +150,14 @@ describe('buildAiGeneration', () => {
 
     it('uses configured distinct id when provided', () => {
         const assistantInfo: LastAssistantInfo = { stopReason: 'stop' }
-        const result = buildAiGeneration(turnState, assistantInfo, configWithDistinctId, 'proj', 'agent', 'user@example.com')
+        const result = buildAiGeneration(
+            turnState,
+            assistantInfo,
+            configWithDistinctId,
+            'proj',
+            'agent',
+            'user@example.com'
+        )
         expect(result.distinctId).toBe('user@example.com')
     })
 
@@ -292,7 +299,19 @@ describe('buildAiSpan', () => {
     })
 
     it('falls back to pi-agent when neither configured distinct id nor session id exists', () => {
-        const result = buildAiSpan('trace-123', undefined, 'read', {}, 'ok', 100, false, null, defaultConfig, 'proj', 'agent')
+        const result = buildAiSpan(
+            'trace-123',
+            undefined,
+            'read',
+            {},
+            'ok',
+            100,
+            false,
+            null,
+            defaultConfig,
+            'proj',
+            'agent'
+        )
         expect(result.distinctId).toBe('pi-agent')
     })
 })
