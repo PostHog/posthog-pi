@@ -4,13 +4,19 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { Tool as McpTool } from '@modelcontextprotocol/sdk/types.js'
 import { VERSION } from './version.js'
 import type { PostHogMcpConfig } from './types.js'
-import { buildPostHogMcpUrl, formatMcpToolResult, getPostHogAuthHeader, jsonSchemaToTypeBox } from './utils.js'
+import {
+    buildPostHogMcpUrl,
+    formatMcpToolResult,
+    getPostHogAuthHeader,
+    jsonSchemaToTypeBox,
+    readConfigFile,
+} from './utils.js'
 
 const STATUS_KEY = 'posthog-mcp'
 const MCP_TOOL_NAME_RE = /^[a-zA-Z0-9_-]+$/
 
 export function registerPostHogMcpExtension(pi: ExtensionAPI) {
-    const config = readConfig()
+    const config = readMcpConfig()
     if (!config.enabled) return
 
     let client: Client | null = null
@@ -182,15 +188,26 @@ export function registerPostHogMcpExtension(pi: ExtensionAPI) {
     })
 }
 
-function readConfig(): PostHogMcpConfig {
-    const enabled = process.env.POSTHOG_MCP_ENABLED !== 'false'
-    const url = process.env.POSTHOG_MCP_URL ?? 'https://mcp.posthog.com/mcp'
-    const version = parseInt(process.env.POSTHOG_MCP_VERSION ?? '2', 10) || 2
-    const features = splitCsv(process.env.POSTHOG_MCP_FEATURES)
-    const tools = splitCsv(process.env.POSTHOG_MCP_TOOLS)
-    const maxInlineChars = parseInt(process.env.POSTHOG_MCP_MAX_INLINE_CHARS ?? '12000', 10) || 12000
-    const spillToFile = process.env.POSTHOG_MCP_SPILL_TO_FILE !== 'false'
-    const tempDir = process.env.POSTHOG_MCP_TEMP_DIR ?? '/tmp/posthog-mcp'
+function readMcpConfig(): PostHogMcpConfig {
+    const file = readConfigFile()
+    const mcp = file.mcp ?? {}
+
+    const enabled =
+        process.env.POSTHOG_MCP_ENABLED !== undefined
+            ? process.env.POSTHOG_MCP_ENABLED !== 'false'
+            : mcp.enabled !== false
+    const url = process.env.POSTHOG_MCP_URL ?? mcp.url ?? 'https://mcp.posthog.com/mcp'
+    const version = parseInt(process.env.POSTHOG_MCP_VERSION ?? '', 10) || (mcp.version ?? 2)
+    const features = process.env.POSTHOG_MCP_FEATURES
+        ? splitCsv(process.env.POSTHOG_MCP_FEATURES)
+        : (mcp.features ?? [])
+    const tools = process.env.POSTHOG_MCP_TOOLS ? splitCsv(process.env.POSTHOG_MCP_TOOLS) : (mcp.tools ?? [])
+    const maxInlineChars = parseInt(process.env.POSTHOG_MCP_MAX_INLINE_CHARS ?? '', 10) || (mcp.maxInlineChars ?? 12000)
+    const spillToFile =
+        process.env.POSTHOG_MCP_SPILL_TO_FILE !== undefined
+            ? process.env.POSTHOG_MCP_SPILL_TO_FILE !== 'false'
+            : mcp.spillToFile !== false
+    const tempDir = process.env.POSTHOG_MCP_TEMP_DIR ?? mcp.tempDir ?? '/tmp/posthog-mcp'
 
     return {
         enabled,

@@ -23,6 +23,11 @@ const configWithTags: PostHogPiConfig = {
     tags: { team: 'platform', env: 'staging' },
 }
 
+const configWithDistinctId: PostHogPiConfig = {
+    ...defaultConfig,
+    distinctId: 'user@example.com',
+}
+
 describe('mapStopReason', () => {
     it('maps known stop reasons', () => {
         expect(mapStopReason('stop')).toBe('stop')
@@ -142,6 +147,26 @@ describe('buildAiGeneration', () => {
         expect(result.properties.team).toBe('platform')
         expect(result.properties.env).toBe('staging')
     })
+
+    it('uses configured distinct id when provided', () => {
+        const assistantInfo: LastAssistantInfo = { stopReason: 'stop' }
+        const result = buildAiGeneration(
+            turnState,
+            assistantInfo,
+            configWithDistinctId,
+            'proj',
+            'agent',
+            'user@example.com'
+        )
+        expect(result.distinctId).toBe('user@example.com')
+    })
+
+    it('falls back to pi-agent when neither configured distinct id nor session id exists', () => {
+        const assistantInfo: LastAssistantInfo = { stopReason: 'stop' }
+        const noSessionTurn: TurnState = { ...turnState, sessionId: undefined }
+        const result = buildAiGeneration(noSessionTurn, assistantInfo, defaultConfig, 'proj', 'agent')
+        expect(result.distinctId).toBe('pi-agent')
+    })
 })
 
 describe('buildAiSpan', () => {
@@ -253,6 +278,42 @@ describe('buildAiSpan', () => {
         expect(result.properties.team).toBe('platform')
         expect(result.properties.env).toBe('staging')
     })
+
+    it('uses configured distinct id when provided', () => {
+        const result = buildAiSpan(
+            'trace-123',
+            undefined,
+            'read',
+            {},
+            'ok',
+            100,
+            false,
+            null,
+            configWithDistinctId,
+            'proj',
+            'agent',
+            'session-789',
+            'user@example.com'
+        )
+        expect(result.distinctId).toBe('user@example.com')
+    })
+
+    it('falls back to pi-agent when neither configured distinct id nor session id exists', () => {
+        const result = buildAiSpan(
+            'trace-123',
+            undefined,
+            'read',
+            {},
+            'ok',
+            100,
+            false,
+            null,
+            defaultConfig,
+            'proj',
+            'agent'
+        )
+        expect(result.distinctId).toBe('pi-agent')
+    })
 })
 
 describe('buildAiTrace', () => {
@@ -305,5 +366,26 @@ describe('buildAiTrace', () => {
         const result = buildAiTrace('trace-123', 1000, undefined, false, null, configWithTags, 'proj', 'agent')
         expect(result.properties.team).toBe('platform')
         expect(result.properties.env).toBe('staging')
+    })
+
+    it('uses configured distinct id when provided', () => {
+        const result = buildAiTrace(
+            'trace-123',
+            1000,
+            undefined,
+            false,
+            null,
+            configWithDistinctId,
+            'proj',
+            'agent',
+            'session-789',
+            'user@example.com'
+        )
+        expect(result.distinctId).toBe('user@example.com')
+    })
+
+    it('falls back to pi-agent when neither configured distinct id nor session id exists', () => {
+        const result = buildAiTrace('trace-123', 1000, undefined, false, null, defaultConfig, 'proj', 'agent')
+        expect(result.distinctId).toBe('pi-agent')
     })
 })

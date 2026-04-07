@@ -1,9 +1,68 @@
 import { Type, type TSchema } from '@sinclair/typebox'
+import { readFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import type { PostHogMcpConfig } from './types.js'
+
+/**
+ * Config file support: reads `~/.pi/agent/posthog.json` once and caches it.
+ * All keys are optional. Env vars always take precedence over file values.
+ *
+ * Example ~/.pi/agent/posthog.json:
+ * {
+ *   "apiKey": "phc_...",
+ *   "personalApiKey": "phx_...",
+ *   "host": "https://us.i.posthog.com",
+ *   "distinctId": "user@example.com"
+ * }
+ */
+export interface PostHogConfigFile {
+    apiKey?: string
+    personalApiKey?: string
+    host?: string
+    privacyMode?: boolean
+    enabled?: boolean
+    traceGrouping?: 'message' | 'session'
+    sessionWindowMinutes?: number
+    projectName?: string
+    agentName?: string
+    tags?: Record<string, string>
+    /** Override event distinct_id (defaults to session id) */
+    distinctId?: string
+    maxAttributeLength?: number
+    mcp?: {
+        enabled?: boolean
+        url?: string
+        version?: number
+        features?: string[]
+        tools?: string[]
+        maxInlineChars?: number
+        spillToFile?: boolean
+        tempDir?: string
+    }
+}
+
+let _configFileCache: PostHogConfigFile | null | undefined
+
+export function readConfigFile(): PostHogConfigFile {
+    if (_configFileCache !== undefined) return _configFileCache ?? {}
+    const configPath = join(homedir(), '.pi', 'agent', 'posthog.json')
+    try {
+        const content = readFileSync(configPath, 'utf-8')
+        _configFileCache = JSON.parse(content) as PostHogConfigFile
+        return _configFileCache ?? {}
+    } catch {
+        _configFileCache = null
+        return {}
+    }
+}
+
+/** Reset the cached config file (for testing). */
+export function resetConfigFileCache(): void {
+    _configFileCache = undefined
+}
 
 export function redactForPrivacy<T>(value: T, privacyMode: boolean): T | null {
     return privacyMode ? null : value
@@ -131,7 +190,7 @@ export function getPostHogAuthHeader(env: NodeJS.ProcessEnv): string | null {
     const authHeader = env.POSTHOG_AUTH_HEADER?.trim()
     if (authHeader) return authHeader
 
-    const apiKey = env.POSTHOG_PERSONAL_API_KEY?.trim()
+    const apiKey = env.POSTHOG_PERSONAL_API_KEY?.trim() || readConfigFile().personalApiKey?.trim()
     if (!apiKey) return null
     return apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`
 }
