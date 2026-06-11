@@ -9,6 +9,9 @@ concurrency:
     group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
     cancel-in-progress: true
 
+permissions:
+    contents: read
+
 jobs:
     typecheck:
         name: Typecheck
@@ -56,4 +59,4 @@ jobs:
               uses: ./.github/actions/setup
 
             - name: Verify package contents
-              run: pnpm pack --dry-run
+              run: npm pack --dry-run
