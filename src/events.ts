@@ -1,5 +1,5 @@
 import type { LastAssistantInfo, PostHogPiConfig, TurnState } from './types.js'
-import { uuidv7 } from '@posthog/core'
+import { v7 as uuidv7 } from 'uuid'
 import { redactForPrivacy, serializeAttribute } from './utils.js'
 import { VERSION } from './version.js'
 

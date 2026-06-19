@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from '@mariozechner/pi-coding-agent'
-import { uuidv7 } from '@posthog/core'
+import { v7 as uuidv7 } from 'uuid'
 import { buildAiGeneration, buildAiSpan, buildAiTrace } from './events.js'
 import type { LastAssistantInfo, PostHogPiConfig, TurnState } from './types.js'
 import { getAgentName, getProjectName, readConfigFile, safeStringify } from './utils.js'
