@@ -11,6 +11,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.3.6)
+      '@posthog/core':
+        specifier: 1.23.4
+        version: 1.23.4
       '@sinclair/typebox':
         specifier: ^0.34.49
         version: 0.34.49

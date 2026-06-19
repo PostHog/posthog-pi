@@ -29,6 +29,7 @@
     ],
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
+        "@posthog/core": "1.23.4",
         "@sinclair/typebox": "^0.34.49",
         "posthog-node": "^5.0.0"
     },

@@ -1,5 +1,5 @@
 import type { LastAssistantInfo, PostHogPiConfig, TurnState } from './types.js'
-import { randomUUID } from 'node:crypto'
+import { uuidv7 } from '@posthog/core'
 import { redactForPrivacy, serializeAttribute } from './utils.js'
 import { VERSION } from './version.js'
 
@@ -112,7 +112,7 @@ export function buildAiSpan(
     configuredDistinctId?: string
 ): AiSpanEvent {
     const distinctId = configuredDistinctId ?? sessionId ?? 'pi-agent'
-    const spanId = randomUUID()
+    const spanId = uuidv7()
     const latency = durationMs !== null ? durationMs / 1000 : null
 
     return {

@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from '@mariozechner/pi-coding-agent'
-import { randomUUID } from 'node:crypto'
+import { uuidv7 } from '@posthog/core'
 import { buildAiGeneration, buildAiSpan, buildAiTrace } from './events.js'
 import type { LastAssistantInfo, PostHogPiConfig, TurnState } from './types.js'
 import { getAgentName, getProjectName, readConfigFile, safeStringify } from './utils.js'
@@ -200,7 +200,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
         if (sessionWindow && Date.now() - sessionWindow.lastOutputAt < timeoutMs) {
             return sessionWindow.sessionId
         }
-        const windowId = randomUUID().slice(0, 8)
+        const windowId = uuidv7().slice(0, 8)
         const sessionId = `pi:${windowId}`
         sessionWindow = { sessionId, lastOutputAt: Date.now() }
         return sessionId
@@ -218,7 +218,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
             if (currentTraceId) {
                 traceTokens.delete(currentTraceId)
             }
-            currentTraceId = randomUUID()
+            currentTraceId = uuidv7()
             return currentTraceId
         }
 
@@ -226,7 +226,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
         const existing = traces.get(runKey)
         if (existing) return existing
 
-        const traceId = randomUUID()
+        const traceId = uuidv7()
         traces.set(runKey, traceId)
         currentTraceId = traceId
         return traceId
@@ -309,7 +309,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
     // Track turn start
     pi.on('turn_start', async (event) => {
         const traceId = getOrCreateTraceId()
-        const spanId = randomUUID()
+        const spanId = uuidv7()
         const sessionId = getOrCreateSessionId()
 
         const turnState: TurnState = {

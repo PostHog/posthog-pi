@@ -28,6 +28,8 @@ const configWithDistinctId: PostHogPiConfig = {
     distinctId: 'user@example.com',
 }
 
+const UUID_V7_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
 describe('mapStopReason', () => {
     it('maps known stop reasons', () => {
         expect(mapStopReason('stop')).toBe('stop')
@@ -189,6 +191,7 @@ describe('buildAiSpan', () => {
         expect(result.event).toBe('$ai_span')
         expect(result.distinctId).toBe('session-789')
         expect(result.properties.$ai_trace_id).toBe('trace-123')
+        expect(result.properties.$ai_span_id).toMatch(UUID_V7_REGEX)
         expect(result.properties.$ai_parent_id).toBe('parent-span-456')
         expect(result.properties.$ai_span_name).toBe('bash')
         expect(result.properties.$ai_latency).toBe(0.25)
