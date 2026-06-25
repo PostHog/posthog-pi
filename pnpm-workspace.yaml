@@ -1,4 +1,9 @@
 packages:
     - '.'
 
+allowBuilds:
+    esbuild: true
+    koffi: true
+    protobufjs: true
+
 minimumReleaseAge: 10080
