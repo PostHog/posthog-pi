@@ -11,52 +11,168 @@ concurrency:
 
 permissions:
     contents: read
+    pull-requests: read
 
 jobs:
+    skip_heavy:
+        name: Classify CI scope
+        runs-on: ubuntu-latest
+        outputs:
+            skip_heavy: ${{ steps.classify.outputs.skip_heavy }}
+            reason: ${{ steps.classify.outputs.reason }}
+        steps:
+            - name: Classify changed files
+              id: classify
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  EVENT_NAME: ${{ github.event_name }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  REPOSITORY: ${{ github.repository }}
+              run: |
+                  set -euo pipefail
+
+                  skip_heavy=false
+                  reason="full CI required by default"
+                  files=""
+
+                  finish() {
+                      {
+                          echo "skip_heavy=${skip_heavy}"
+                          echo "reason=${reason}"
+                      } >> "$GITHUB_OUTPUT"
+
+                      {
+                          echo "### CI scope classification"
+                          echo
+                          echo "${reason}"
+                          if [ -n "${files}" ] && [ -s "${files}" ]; then
+                              echo
+                              echo "Changed files:"
+                              sed 's/^/- `/' "${files}" | sed 's/$/`/'
+                          fi
+                      } >> "$GITHUB_STEP_SUMMARY"
+                  }
+
+                  if [ "${EVENT_NAME}" != "pull_request" ]; then
+                      reason="full CI required for ${EVENT_NAME} events"
+                      finish
+                      exit 0
+                  fi
+
+                  files="$(mktemp)"
+                  if ! gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}/files" --paginate --jq '.[].filename' > "${files}"; then
+                      reason="full CI required because changed-file detection failed"
+                      finish
+                      exit 0
+                  fi
+
+                  if [ ! -s "${files}" ]; then
+                      reason="full CI required because no changed files were detected"
+                      finish
+                      exit 0
+                  fi
+
+                  skip_heavy=true
+                  reason="heavy CI skipped because only non-impacting docs/release metadata changed"
+
+                  while IFS= read -r file; do
+                      case "${file}" in
+                          *.md|.changeset/*.md|.github/workflows/release.yml)
+                              ;;
+                          *)
+                              skip_heavy=false
+                              reason="full CI required because at least one changed file may affect source, config, packaging, or CI"
+                              break
+                              ;;
+                      esac
+                  done < "${files}"
+
+                  finish
+
     typecheck:
         name: Typecheck
         runs-on: ubuntu-latest
+        needs: skip_heavy
         steps:
+            - name: Skip Typecheck
+              if: needs.skip_heavy.outputs.skip_heavy == 'true'
+              env:
+                  SKIP_REASON: ${{ needs.skip_heavy.outputs.reason }}
+              run: echo "$SKIP_REASON"
+
             - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              if: needs.skip_heavy.outputs.skip_heavy != 'true'
 
             - name: Setup environment
+              if: needs.skip_heavy.outputs.skip_heavy != 'true'
               uses: ./.github/actions/setup
 
             - name: Typecheck
+              if: needs.skip_heavy.outputs.skip_heavy != 'true'
               run: pnpm typecheck
 
     lint:
         name: Lint
         runs-on: ubuntu-latest
+        needs: skip_heavy
         steps:
+            - name: Skip Lint
+              if: needs.skip_heavy.outputs.skip_heavy == 'true'
+              env:
+                  SKIP_REASON: ${{ needs.skip_heavy.outputs.reason }}
+              run: echo "$SKIP_REASON"
+
             - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              if: needs.skip_heavy.outputs.skip_heavy != 'true'
 
             - name: Setup environment
+              if: needs.skip_heavy.outputs.skip_heavy != 'true'
               uses: ./.github/actions/setup
 
             - name: Lint
+              if: needs.skip_heavy.outputs.skip_heavy != 'true'
               run: pnpm lint
 
     test:
         name: Test
         runs-on: ubuntu-latest
+        needs: skip_heavy
         steps:
+            - name: Skip Test
+              if: needs.skip_heavy.outputs.skip_heavy == 'true'
+              env:
+                  SKIP_REASON: ${{ needs.skip_heavy.outputs.reason }}
+              run: echo "$SKIP_REASON"
+
             - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              if: needs.skip_heavy.outputs.skip_heavy != 'true'
 
             - name: Setup environment
+              if: needs.skip_heavy.outputs.skip_heavy != 'true'
               uses: ./.github/actions/setup
 
             - name: Test
+              if: needs.skip_heavy.outputs.skip_heavy != 'true'
               run: pnpm test
 
     pack:
         name: Pack dry run
         runs-on: ubuntu-latest
+        needs: skip_heavy
         steps:
+            - name: Skip Pack dry run
+              if: needs.skip_heavy.outputs.skip_heavy == 'true'
+              env:
+                  SKIP_REASON: ${{ needs.skip_heavy.outputs.reason }}
+              run: echo "$SKIP_REASON"
+
             - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              if: needs.skip_heavy.outputs.skip_heavy != 'true'
 
             - name: Setup environment
+              if: needs.skip_heavy.outputs.skip_heavy != 'true'
               uses: ./.github/actions/setup
 
             - name: Verify package contents
+              if: needs.skip_heavy.outputs.skip_heavy != 'true'
               run: npm pack --dry-run
