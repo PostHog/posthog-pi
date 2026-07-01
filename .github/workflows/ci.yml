@@ -60,7 +60,7 @@ jobs:
                   fi
 
                   files="$(mktemp)"
-                  if ! gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}/files" --paginate --jq '.[].filename' > "${files}"; then
+                  if ! gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}/files" --paginate --jq '.[] | .filename, (.previous_filename // empty)' > "${files}"; then
                       reason="full CI required because changed-file detection failed"
                       finish
                       exit 0
@@ -72,19 +72,53 @@ jobs:
                       exit 0
                   fi
 
+                  is_safe_global_ci_skip_file() {
+                      case "$1" in
+                          *.md) return 0 ;;
+                          docs/*) return 0 ;;
+                          .github/ISSUE_TEMPLATE/*) return 0 ;;
+                          .github/PULL_REQUEST_TEMPLATE/*) return 0 ;;
+                          .github/pull_request_template.md) return 0 ;;
+                          .github/CODEOWNERS) return 0 ;;
+                          CODEOWNERS) return 0 ;;
+                          .github/dependabot.yml) return 0 ;;
+                          .github/workflows/release.yml) return 0 ;;
+                          .github/workflows/release.yaml) return 0 ;;
+                          .github/workflows/publish.yml) return 0 ;;
+                          .github/workflows/publish.yaml) return 0 ;;
+                          .github/workflows/stale.yml) return 0 ;;
+                          .github/workflows/stale.yaml) return 0 ;;
+                          .github/workflows/lint-pr.yml) return 0 ;;
+                          .github/workflows/lint-pr.yaml) return 0 ;;
+                          .github/workflows/call-flags-project-board.yml) return 0 ;;
+                          .github/workflows/call-flags-project-board.yaml) return 0 ;;
+                          .github/workflows/changeset-hygiene.yml) return 0 ;;
+                          .github/workflows/changeset-hygiene.yaml) return 0 ;;
+                          .github/workflows/dependabot-changeset.yml) return 0 ;;
+                          .github/workflows/dependabot-changeset.yaml) return 0 ;;
+                          .github/workflows/validate-versioning.yml) return 0 ;;
+                          .github/workflows/validate-versioning.yaml) return 0 ;;
+                          .github/workflows/new-pr.yml) return 0 ;;
+                          .github/workflows/new-pr.yaml) return 0 ;;
+                          .github/workflows/generated-files-notice.yml) return 0 ;;
+                          .github/workflows/generated-files-notice.yaml) return 0 ;;
+                          .github/workflows/posthog-upgrade.yml) return 0 ;;
+                          .github/workflows/posthog-upgrade.yaml) return 0 ;;
+                          .github/workflows/posthog-watcher-*.yml) return 0 ;;
+                          .github/workflows/posthog-watcher-*.yaml) return 0 ;;
+                          *) return 1 ;;
+                      esac
+                  }
+
                   skip_heavy=true
-                  reason="heavy CI skipped because only non-impacting docs/release metadata changed"
+                  reason="heavy CI skipped because only globally safe docs/metadata files changed"
 
                   while IFS= read -r file; do
-                      case "${file}" in
-                          *.md|.changeset/*.md|.github/workflows/release.yml)
-                              ;;
-                          *)
-                              skip_heavy=false
-                              reason="full CI required because at least one changed file may affect source, config, packaging, or CI"
-                              break
-                              ;;
-                      esac
+                      if ! is_safe_global_ci_skip_file "${file}"; then
+                          skip_heavy=false
+                          reason="full CI required because at least one changed file is outside the global docs/metadata safe set"
+                          break
+                      fi
                   done < "${files}"
 
                   finish
