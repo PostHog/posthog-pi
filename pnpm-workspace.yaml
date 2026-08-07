@@ -2,6 +2,7 @@ packages:
     - '.'
 
 allowBuilds:
+    '@google/genai': false
     esbuild: true
     koffi: true
     protobufjs: true
