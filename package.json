@@ -37,14 +37,14 @@
         "@mariozechner/pi-coding-agent": "*"
     },
     "devDependencies": {
-        "@changesets/cli": "^2.29.8",
+        "@changesets/cli": "^3.0.0",
         "@mariozechner/pi-ai": "*",
         "@mariozechner/pi-coding-agent": "*",
-        "@types/node": "^22.0.0",
-        "oxfmt": "^0.40.0",
+        "@types/node": "^26.1.2",
+        "oxfmt": "^0.63.0",
         "oxlint": "^1.55.0",
         "typescript": "^7.0.2",
-        "vitest": "^3.2.6"
+        "vitest": "^4.1.10"
     },
     "pi": {
         "extensions": [
