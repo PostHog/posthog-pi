@@ -41,7 +41,7 @@
         "@mariozechner/pi-ai": "*",
         "@mariozechner/pi-coding-agent": "*",
         "@types/node": "^26.1.2",
-        "oxfmt": "^0.63.0",
+        "oxfmt": "^0.64.0",
         "oxlint": "^1.55.0",
         "typescript": "^7.0.2",
         "vitest": "^4.1.10"
