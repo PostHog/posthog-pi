@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from '@mariozechner/pi-coding-agent'
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { registerAnalyticsExtension } from './analytics-extension.js'
 import { registerPostHogMcpExtension } from './mcp-extension.js'
 

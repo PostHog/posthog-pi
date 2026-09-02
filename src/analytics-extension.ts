@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from '@mariozechner/pi-coding-agent'
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { randomUUID } from 'node:crypto'
 import { buildAiGeneration, buildAiSpan, buildAiTrace } from './events.js'
 import type { LastAssistantInfo, PostHogPiConfig, TurnState } from './types.js'
