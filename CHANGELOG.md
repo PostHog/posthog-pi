@@ -1,5 +1,11 @@
 # @posthog/pi
 
+## 0.3.0
+
+### Minor Changes
+
+- a953ec1: Migrate Pi dependencies to the `@earendil-works` packages with a minimum supported version of 0.80.1.
+
 ## 0.2.0
 
 ### Minor Changes
