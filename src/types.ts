@@ -15,6 +15,8 @@ export interface PostHogPiConfig {
     distinctId?: string
     /** Max length for serialized tool input/output attributes */
     maxAttributeLength: number
+    /** Max serialized size of one captured event, in bytes */
+    maxEventBytes: number
 }
 
 export interface PostHogMcpConfig {

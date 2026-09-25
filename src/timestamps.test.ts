@@ -16,6 +16,7 @@ const config: PostHogPiConfig = {
     sessionWindowMinutes: 60,
     tags: {},
     maxAttributeLength: 12000,
+    maxEventBytes: 900000,
 }
 
 const originalTimezone = process.env.TZ

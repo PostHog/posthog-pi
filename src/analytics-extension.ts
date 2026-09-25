@@ -118,6 +118,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
         parseInt(process.env.POSTHOG_SESSION_WINDOW_MINUTES ?? '', 10) || (file.sessionWindowMinutes ?? 60)
     const maxAttributeLength =
         parseInt(process.env.POSTHOG_MAX_ATTRIBUTE_LENGTH ?? '', 10) || (file.maxAttributeLength ?? 12000)
+    const maxEventBytes = parseInt(process.env.POSTHOG_MAX_EVENT_BYTES ?? '', 10) || (file.maxEventBytes ?? 900000)
     const configuredDistinctId = process.env.POSTHOG_DISTINCT_ID ?? file.distinctId
     const personalApiKey = (process.env.POSTHOG_PERSONAL_API_KEY ?? file.personalApiKey)?.trim() || null
 
@@ -148,6 +149,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
         agentName: process.env.POSTHOG_AGENT_NAME ?? file.agentName,
         tags,
         maxAttributeLength,
+        maxEventBytes,
         distinctId: configuredDistinctId,
     }
 
