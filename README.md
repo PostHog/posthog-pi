@@ -107,6 +107,7 @@ export POSTHOG_MCP_MAX_INLINE_CHARS="12000"
 | `POSTHOG_DISTINCT_ID`            | auto-discovered from PostHog personal API key (fallback: session id `pi:...`) | Override `distinct_id` used for all `$ai_*` events (for example `user@example.com`). When set, the extension also calls `identify()` on session start. |
 | `POSTHOG_TAGS`                   | _(none)_                                                                      | Custom tags added to all events (format: `key1:val1,key2:val2`)                                                                                        |
 | `POSTHOG_MAX_ATTRIBUTE_LENGTH`   | `12000`                                                                       | Max length for serialized tool input/output attributes                                                                                                 |
+| `POSTHOG_MAX_EVENT_BYTES`        | `900000`                                                                      | Max serialized size of one captured event in bytes. Clamped to the PostHog AI event limit; oversized content is truncated.                             |
 
 If `POSTHOG_DISTINCT_ID` is set, `@posthog/pi` calls `identify()` once on session start for that distinct ID. If the value looks like an email address, it is also sent as the `email` person property.
 
@@ -176,6 +177,19 @@ Captured when an agent run completes (one per user prompt).
 | `$ai_error`               | Error message (if any)                     |
 | `$ai_project_name`        | Project name                               |
 | `$ai_agent_name`          | Agent name                                 |
+
+## Event Size Limits
+
+PostHog rejects AI events larger than `983040` bytes with HTTP 413, and that failure drops the whole flush batch. `$ai_generation` content follows the conversation, so a single large tool result or model response can exceed the limit on its own.
+
+`@posthog/pi` measures every generation event before capture and clips conversation content when needed:
+
+- Message structure, roles, and order survive; only string content is clipped, each clip marked with `...[truncated N chars]`.
+- `$ai_input`, `$ai_output_choices`, and `$ai_user_prompt` share the budget, weighted by each string's measured byte density.
+- Content that clipping cannot fit (for example tens of thousands of tiny strings) is replaced with an `[omitted: input exceeded the PostHog AI event size limit]` placeholder so the event still lands.
+- Events that already fit are captured unchanged.
+
+Set `POSTHOG_MAX_EVENT_BYTES` (or `maxEventBytes` in `~/.pi/agent/posthog.json`) to lower the budget. Values above `983040` are clamped to the PostHog limit.
 
 ## Trace Grouping
 
