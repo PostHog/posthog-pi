@@ -1,5 +1,11 @@
 # @posthog/pi
 
+## 0.3.1
+
+### Patch Changes
+
+- 51f1feb: Declare TypeBox as a host-provided peer dependency to avoid duplicate runtime modules and Pi's extension dependency warning.
+
 ## 0.3.0
 
 ### Minor Changes
