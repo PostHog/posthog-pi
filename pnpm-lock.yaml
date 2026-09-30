@@ -11,9 +11,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.30.0(zod@4.4.3)
-      '@sinclair/typebox':
-        specifier: ^0.34.49
-        version: 0.34.52
       posthog-node:
         specifier: ^5.0.0
         version: 5.52.4
@@ -24,6 +21,9 @@ importers:
       '@earendil-works/pi-coding-agent':
         specifier: 0.85.1
         version: 0.85.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.3)(zod@4.4.3)
+      '@sinclair/typebox':
+        specifier: ^0.34.49
+        version: 0.34.52
       '@types/node':
         specifier: ^26.1.2
         version: 26.6.1

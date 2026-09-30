@@ -29,15 +29,16 @@
     ],
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
-        "@sinclair/typebox": "^0.34.49",
         "posthog-node": "^5.0.0"
     },
     "peerDependencies": {
-        "@earendil-works/pi-coding-agent": ">=0.80.1 <1.0.0"
+        "@earendil-works/pi-coding-agent": ">=0.80.1 <1.0.0",
+        "@sinclair/typebox": "*"
     },
     "devDependencies": {
         "@changesets/cli": "^3.0.0",
         "@earendil-works/pi-coding-agent": "0.85.1",
+        "@sinclair/typebox": "^0.34.49",
         "@types/node": "^26.1.2",
         "oxfmt": "^0.68.0",
         "oxlint": "^1.55.0",
