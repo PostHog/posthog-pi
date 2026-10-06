@@ -32,6 +32,8 @@ export interface PostHogConfigFile {
     /** Override event distinct_id (defaults to session id) */
     distinctId?: string
     maxAttributeLength?: number
+    /** Max serialized size of one captured event, in bytes */
+    maxEventBytes?: number
     mcp?: {
         enabled?: boolean
         url?: string
@@ -107,7 +109,7 @@ function redactSensitive(value: unknown, seen: WeakSet<object>, depth: number): 
     return output
 }
 
-function truncate(value: string, maxLength: number): string {
+export function truncate(value: string, maxLength: number): string {
     if (maxLength <= 0) return ''
     if (value.length <= maxLength) return value
     const omitted = value.length - maxLength

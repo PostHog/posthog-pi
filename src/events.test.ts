@@ -11,6 +11,7 @@ const defaultConfig: PostHogPiConfig = {
     sessionWindowMinutes: 60,
     tags: {},
     maxAttributeLength: 12000,
+    maxEventBytes: 900000,
 }
 
 const privacyConfig: PostHogPiConfig = {
@@ -387,5 +388,158 @@ describe('buildAiTrace', () => {
     it('falls back to pi-agent when neither configured distinct id nor session id exists', () => {
         const result = buildAiTrace('trace-123', 1000, undefined, false, null, defaultConfig, 'proj', 'agent')
         expect(result.distinctId).toBe('pi-agent')
+    })
+})
+
+// PostHog rejects AI events above 983_040 bytes with HTTP 413 and drops the
+// whole flush batch, so generation events must always fit that limit.
+const POSTHOG_AI_EVENT_LIMIT_BYTES = 983_040
+
+const assistantInfo: LastAssistantInfo = { stopReason: 'stop', outputText: 'done' }
+
+function serializedBytes(properties: Record<string, unknown>): number {
+    return Buffer.byteLength(JSON.stringify(properties), 'utf8')
+}
+
+function generationFor(input: unknown[], userPrompt: string, config: PostHogPiConfig = defaultConfig) {
+    const turnState: TurnState = {
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        startTime: Date.now() - 1000,
+        model: 'claude-sonnet-4-20250514',
+        provider: 'anthropic',
+        input,
+        sessionId: 'session-789',
+        userPrompt,
+    }
+    return buildAiGeneration(turnState, assistantInfo, config, 'proj', 'agent')
+}
+
+describe('buildAiGeneration event size limit', () => {
+    it('fits a turn whose tool result alone exceeds the PostHog limit', () => {
+        const result = generationFor(
+            [
+                { role: 'user', content: 'read the log' },
+                { role: 'tool', content: 'A'.repeat(1_200_000) },
+            ],
+            'read the log'
+        )
+
+        expect(serializedBytes(result.properties)).toBeLessThanOrEqual(POSTHOG_AI_EVENT_LIMIT_BYTES)
+        expect(result.properties.$ai_input).toEqual([
+            { role: 'user', content: 'read the log' },
+            { role: 'tool', content: expect.stringContaining('[truncated ') },
+        ])
+    })
+
+    it('fits a turn whose output text exceeds the PostHog limit', () => {
+        const bigOutput: LastAssistantInfo = { stopReason: 'stop', outputText: 'B'.repeat(1_500_000) }
+        const turnState: TurnState = {
+            traceId: 'trace-123',
+            spanId: 'span-456',
+            startTime: Date.now() - 1000,
+            model: 'claude-sonnet-4-20250514',
+            provider: 'anthropic',
+            input: [{ role: 'user', content: 'write the file' }],
+            sessionId: 'session-789',
+            userPrompt: 'write the file',
+        }
+
+        const result = buildAiGeneration(turnState, bigOutput, defaultConfig, 'proj', 'agent')
+
+        expect(serializedBytes(result.properties)).toBeLessThanOrEqual(POSTHOG_AI_EVENT_LIMIT_BYTES)
+        expect(result.properties.$ai_output_choices).toEqual([
+            { role: 'assistant', content: expect.stringContaining('[truncated ') },
+        ])
+    })
+
+    it('fits multi-byte content, where characters cost more than one byte', () => {
+        const result = generationFor(
+            [
+                { role: 'user', content: 'describe' },
+                { role: 'tool', content: '🦀'.repeat(400_000) },
+            ],
+            'describe'
+        )
+
+        expect(serializedBytes(result.properties)).toBeLessThanOrEqual(POSTHOG_AI_EVENT_LIMIT_BYTES)
+    })
+
+    it('fits a turn with many messages', () => {
+        const input = Array.from({ length: 400 }, (_, index) => ({
+            role: 'tool',
+            content: `${index}:${'C'.repeat(4000)}`,
+        }))
+
+        const result = generationFor(input, 'summarize')
+
+        expect(serializedBytes(result.properties)).toBeLessThanOrEqual(POSTHOG_AI_EVENT_LIMIT_BYTES)
+        expect(result.properties.$ai_input).toHaveLength(400)
+    })
+
+    it('omits conversation content that clipping cannot fit', () => {
+        const input = [
+            {
+                role: 'tool',
+                content: Array.from({ length: 80_000 }, (_, index) => `s${index}${'D'.repeat(30)}`),
+            },
+        ]
+
+        const result = generationFor(input, 'summarize')
+
+        expect(serializedBytes(result.properties)).toBeLessThanOrEqual(POSTHOG_AI_EVENT_LIMIT_BYTES)
+        expect(result.properties.$ai_input).toEqual([
+            { role: 'system', content: '[omitted: input exceeded the PostHog AI event size limit]' },
+        ])
+        expect(result.properties.$ai_output_choices).toBeNull()
+        expect(result.properties.$ai_user_prompt).toBeUndefined()
+    })
+
+    it('uses the available budget instead of clipping further than needed', () => {
+        // Every clipped string also carries a `...[truncated N chars]` marker, so
+        // a cap computed from the budget alone overshoots and wastes roughly half
+        // the available bytes. The cap must be found against the real serialized
+        // size, keeping as much conversation content as the budget allows.
+        const input = Array.from({ length: 400 }, (_, index) => ({
+            role: 'tool',
+            content: `m${index}:${'H'.repeat(5000)}`,
+        }))
+
+        const result = generationFor(input, 'summarize', { ...defaultConfig, maxEventBytes: 900_000 })
+        const bytes = serializedBytes(result.properties)
+
+        expect(bytes).toBeLessThanOrEqual(900_000)
+        expect(bytes).toBeGreaterThan(0.9 * 900_000)
+        expect(result.properties.$ai_input).toHaveLength(400)
+    })
+
+    it('leaves turns that already fit untouched', () => {
+        const input = [
+            { role: 'user', content: 'read the log' },
+            { role: 'tool', content: 'E'.repeat(2_000) },
+        ]
+
+        const result = generationFor(input, 'read the log')
+
+        expect(result.properties.$ai_input).toEqual(input)
+        expect(result.properties.$ai_user_prompt).toBe('read the log')
+    })
+
+    it('honors a smaller configured budget', () => {
+        const result = generationFor([{ role: 'tool', content: 'F'.repeat(200_000) }], 'read the log', {
+            ...defaultConfig,
+            maxEventBytes: 20_000,
+        })
+
+        expect(serializedBytes(result.properties)).toBeLessThanOrEqual(20_000)
+    })
+
+    it('clamps a configured budget above the PostHog limit', () => {
+        const result = generationFor([{ role: 'tool', content: 'G'.repeat(2_000_000) }], 'read the log', {
+            ...defaultConfig,
+            maxEventBytes: 50_000_000,
+        })
+
+        expect(serializedBytes(result.properties)).toBeLessThanOrEqual(POSTHOG_AI_EVENT_LIMIT_BYTES)
     })
 })
