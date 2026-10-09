@@ -118,30 +118,31 @@ If `POSTHOG_DISTINCT_ID` is not set, `@posthog/pi` will try to discover your ide
 
 Captured on every LLM call (one per turn).
 
-| Property                      | Description                                                       |
-| ----------------------------- | ----------------------------------------------------------------- |
-| `$ai_model`                   | Model name (e.g. `claude-sonnet-4-20250514`)                      |
-| `$ai_provider`                | Provider name (e.g. `anthropic`, `openai`)                        |
-| `$ai_latency`                 | LLM response duration in seconds (actual LLM time when available) |
-| `$ai_input_tokens`            | Input token count                                                 |
-| `$ai_output_tokens`           | Output token count                                                |
-| `$ai_total_tokens`            | Total token count                                                 |
-| `$ai_total_cost_usd`          | Total cost in USD                                                 |
-| `$ai_input_cost_usd`          | Input cost in USD                                                 |
-| `$ai_output_cost_usd`         | Output cost in USD                                                |
-| `$ai_stop_reason`             | Why generation stopped (`stop`, `length`, `tool_calls`, `error`)  |
-| `$ai_is_error`                | Whether the generation errored                                    |
-| `$ai_error`                   | Error message (if any)                                            |
-| `$ai_input`                   | Input messages (redacted in privacy mode)                         |
-| `$ai_output_choices`          | Output choices (redacted in privacy mode)                         |
-| `$ai_user_prompt`             | Raw user prompt text (redacted in privacy mode)                   |
-| `$ai_trace_id`                | Trace ID for hierarchical grouping                                |
-| `$ai_span_id`                 | Span ID for this generation                                       |
-| `$ai_session_id`              | Session identifier                                                |
-| `$ai_project_name`            | Project name                                                      |
-| `$ai_agent_name`              | Agent name (includes subagent name if applicable)                 |
-| `cache_read_input_tokens`     | Cache read token count                                            |
-| `cache_creation_input_tokens` | Cache creation token count                                        |
+| Property                          | Description                                                       |
+| --------------------------------- | ----------------------------------------------------------------- |
+| `$ai_model`                       | Model name (e.g. `claude-sonnet-4-20250514`)                      |
+| `$ai_provider`                    | Provider name (e.g. `anthropic`, `openai`)                        |
+| `$ai_latency`                     | LLM response duration in seconds (actual LLM time when available) |
+| `$ai_input_tokens`                | Input token count                                                 |
+| `$ai_output_tokens`               | Output token count                                                |
+| `$ai_total_tokens`                | Total token count                                                 |
+| `$ai_total_cost_usd`              | Total cost in USD                                                 |
+| `$ai_input_cost_usd`              | Input cost in USD                                                 |
+| `$ai_output_cost_usd`             | Output cost in USD                                                |
+| `$ai_stop_reason`                 | Why generation stopped (`stop`, `length`, `tool_calls`, `error`)  |
+| `$ai_is_error`                    | Whether the generation errored                                    |
+| `$ai_error`                       | Error message (if any)                                            |
+| `$ai_input`                       | Input messages (redacted in privacy mode)                         |
+| `$ai_output_choices`              | Output choices (redacted in privacy mode)                         |
+| `$ai_user_prompt`                 | Raw user prompt text (redacted in privacy mode)                   |
+| `$ai_trace_id`                    | Trace ID for hierarchical grouping                                |
+| `$ai_span_id`                     | Span ID for this generation                                       |
+| `$ai_session_id`                  | Session identifier                                                |
+| `$ai_project_name`                | Project name                                                      |
+| `$ai_agent_name`                  | Agent name (includes subagent name if applicable)                 |
+| `$ai_cache_read_input_tokens`     | Cache read token count                                            |
+| `$ai_cache_creation_input_tokens` | Cache creation token count                                        |
+| `$ai_cache_reporting_exclusive`   | Always `true`: `$ai_input_tokens` excludes cached tokens          |
 
 ### `$ai_span`
 
