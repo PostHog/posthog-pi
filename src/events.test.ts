@@ -86,8 +86,11 @@ describe('buildAiGeneration', () => {
         expect(result.properties.$ai_framework).toBe('pi')
         expect(result.properties.$ai_project_name).toBe('my-project')
         expect(result.properties.$ai_agent_name).toBe('my-project')
-        expect(result.properties.cache_read_input_tokens).toBe(10)
-        expect(result.properties.cache_creation_input_tokens).toBe(5)
+        expect(result.properties.$ai_cache_read_input_tokens).toBe(10)
+        expect(result.properties.$ai_cache_creation_input_tokens).toBe(5)
+        expect(result.properties.$ai_cache_reporting_exclusive).toBe(true)
+        expect(result.properties).not.toHaveProperty('cache_read_input_tokens')
+        expect(result.properties).not.toHaveProperty('cache_creation_input_tokens')
     })
 
     it('includes output choices from outputText', () => {

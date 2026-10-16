@@ -88,8 +88,11 @@ export function buildAiGeneration(
             $ai_framework: 'pi',
             $ai_project_name: projectName,
             $ai_agent_name: agentName,
-            cache_read_input_tokens: assistantInfo.usage?.cacheRead ?? null,
-            cache_creation_input_tokens: assistantInfo.usage?.cacheWrite ?? null,
+            $ai_cache_read_input_tokens: assistantInfo.usage?.cacheRead ?? null,
+            $ai_cache_creation_input_tokens: assistantInfo.usage?.cacheWrite ?? null,
+            // pi reports `usage.input` net of cache reads and writes for every provider,
+            // so PostHog must not subtract them again when pricing non-Anthropic models.
+            $ai_cache_reporting_exclusive: true,
             ...(turnState.userPrompt && !config.privacyMode ? { $ai_user_prompt: turnState.userPrompt } : {}),
             ...config.tags,
         },
