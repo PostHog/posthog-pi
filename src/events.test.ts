@@ -194,6 +194,7 @@ describe('buildAiSpan', () => {
         expect(result.properties.$ai_trace_id).toBe('trace-123')
         expect(result.properties.$ai_parent_id).toBe('parent-span-456')
         expect(result.properties.$ai_span_name).toBe('bash')
+        expect(result.properties.$ai_span_type).toBe('tool')
         expect(result.properties.$ai_latency).toBe(0.25)
         expect(result.properties.$ai_is_error).toBe(false)
         expect(result.properties.$ai_input_state).toBe('{"command":"ls -la"}')

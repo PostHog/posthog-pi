@@ -134,6 +134,7 @@ export function buildAiSpan(
             $ai_span_id: spanId,
             $ai_parent_id: parentSpanId ?? null,
             $ai_span_name: toolName,
+            $ai_span_type: 'tool',
             $ai_input_state: config.privacyMode ? null : serializeAttribute(toolInput, config.maxAttributeLength),
             $ai_output_state: config.privacyMode ? null : serializeAttribute(toolOutput, config.maxAttributeLength),
             $ai_latency: latency,

@@ -151,6 +151,7 @@ Captured for each tool execution (read, write, edit, bash, etc.).
 | Property           | Description                                                           |
 | ------------------ | --------------------------------------------------------------------- |
 | `$ai_span_name`    | Tool name                                                             |
+| `$ai_span_type`    | Always `tool`                                                         |
 | `$ai_latency`      | Tool execution duration in seconds                                    |
 | `$ai_is_error`     | Whether the tool call errored                                         |
 | `$ai_error`        | Error message (if any)                                                |
