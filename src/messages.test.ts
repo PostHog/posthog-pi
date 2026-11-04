@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractAssistantText, extractToolCalls, formatContextMessages } from './messages.js'
+import { extractAssistantText, extractToolCalls, formatContextMessages, formatToolError } from './messages.js'
 
 const assistantWithToolCall = {
     role: 'assistant',
@@ -83,5 +83,21 @@ describe('formatContextMessages', () => {
     it('keeps unknown message roles as serialized content', () => {
         const [message] = formatContextMessages([{ role: 'bashExecution', command: 'ls' }])
         expect(message).toEqual({ role: 'unknown', content: '{"role":"bashExecution","command":"ls"}' })
+    })
+})
+
+describe('formatToolError', () => {
+    it('uses the text of a failed tool result', () => {
+        expect(formatToolError({ content: [{ type: 'text', text: 'command not found' }], details: {} })).toBe(
+            'command not found'
+        )
+    })
+
+    it('falls back to the serialized result when there is no text', () => {
+        expect(formatToolError({ content: [{ type: 'image', data: 'x', mimeType: 'image/png' }] })).toBe(
+            '{"content":[{"type":"image","data":"x","mimeType":"image/png"}]}'
+        )
+        expect(formatToolError('boom')).toBe('boom')
+        expect(formatToolError(undefined)).toBeNull()
     })
 })

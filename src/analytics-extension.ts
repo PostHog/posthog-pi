@@ -1,9 +1,9 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { randomUUID } from 'node:crypto'
 import { buildAiGeneration, buildAiSpan, buildAiTrace } from './events.js'
-import { extractAssistantText, extractToolCalls, formatContextMessages } from './messages.js'
+import { extractAssistantText, extractToolCalls, formatContextMessages, formatToolError } from './messages.js'
 import type { LastAssistantInfo, PostHogPiConfig, TurnState } from './types.js'
-import { getAgentName, getProjectName, readConfigFile, safeStringify } from './utils.js'
+import { getAgentName, getProjectName, readConfigFile } from './utils.js'
 
 const DEFAULT_HOST = 'https://us.i.posthog.com'
 
@@ -533,7 +533,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
             event.result,
             durationMs,
             event.isError,
-            event.isError ? (safeStringify(event.result) ?? null) : null,
+            event.isError ? formatToolError(event.result) : null,
             config,
             projectName,
             agentName,

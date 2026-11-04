@@ -55,6 +55,19 @@ export function extractAssistantText(content: unknown, separator = ''): string {
     return joinText(content, separator)
 }
 
+/**
+ * A failed tool's result as `$ai_error`: the text the model sees, not the result's JSON.
+ * PostHog groups errors by the start of this message, so a JSON wrapper would group them badly.
+ */
+export function formatToolError(result: unknown): string | null {
+    if (typeof result === 'string') return result
+    const content =
+        typeof result === 'object' && result !== null ? (result as { content?: unknown }).content : undefined
+    const text = joinText(content, '')
+    if (text.length > 0) return text
+    return safeStringify(result) ?? null
+}
+
 function formatMessage(msg: unknown): PostHogMessage {
     if (typeof msg !== 'object' || msg === null || !('role' in msg)) {
         return { role: 'unknown', content: safeStringify(msg) }
