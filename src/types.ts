@@ -1,3 +1,5 @@
+import type { PostHogToolCall } from './messages.js'
+
 export interface PostHogPiConfig {
     apiKey: string
     host: string
@@ -35,6 +37,8 @@ export interface LastAssistantInfo {
     provider?: string
     /** Text content from the assistant response */
     outputText?: string
+    /** Tool calls the assistant made, in OpenAI format */
+    toolCalls?: PostHogToolCall[]
     cost?: {
         input: number
         output: number
@@ -49,7 +53,7 @@ export interface LastAssistantInfo {
         cacheWrite: number
         totalTokens: number
     }
-    /** Actual LLM response latency in ms (message_start to message_end) */
+    /** LLM request latency in ms, from the request start to the end of the response */
     llmLatencyMs?: number
 }
 
@@ -63,4 +67,8 @@ export interface TurnState {
     sessionId?: string
     /** Raw user prompt that triggered this turn */
     userPrompt?: string
+    /** When the turn's latest model request started (its `context` event) */
+    requestStartTime?: number
+    /** Whether a generation was already sent for this turn */
+    generationCaptured?: boolean
 }
