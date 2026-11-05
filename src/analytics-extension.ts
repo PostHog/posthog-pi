@@ -1,8 +1,9 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { randomUUID } from 'node:crypto'
 import { buildAiGeneration, buildAiSpan, buildAiTrace } from './events.js'
+import { extractAssistantText, extractToolCalls, formatContextMessages, formatToolError } from './messages.js'
 import type { LastAssistantInfo, PostHogPiConfig, TurnState } from './types.js'
-import { getAgentName, getProjectName, readConfigFile, safeStringify } from './utils.js'
+import { getAgentName, getProjectName, readConfigFile } from './utils.js'
 
 const DEFAULT_HOST = 'https://us.i.posthog.com'
 
@@ -173,8 +174,10 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
     const turns = new Map<number, TurnState>()
     /** Active trace IDs keyed by agentRunId */
     const traces = new Map<string, string>()
-    /** Most recent generation spanId, used as parent for tool spans */
+    /** Most recent generation spanId, the fallback parent for tool spans */
     let currentGenerationSpanId: string | undefined
+    /** spanId of the generation that made each tool call, keyed by toolCallId */
+    const toolCallGenerations = new Map<string, string>()
     /** Current trace ID */
     let currentTraceId: string | undefined
     /** Current model/provider (updated via model_select) */
@@ -188,10 +191,8 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
     let agentStartTime: number | undefined
     /** Last agent run counter for trace grouping */
     let agentRunCounter = 0
-    /** Tool execution start times and args keyed by toolCallId */
-    const toolStartTimes = new Map<string, { startTime: number; args: unknown }>()
-    /** Message start times keyed by timestamp for LLM latency tracking */
-    const messageStartTimes = new Map<number, number>()
+    /** Tool execution start times, args and span ids keyed by toolCallId */
+    const toolStartTimes = new Map<string, { startTime: number; args: unknown; spanId: string }>()
     /** Last user prompt text (captured via input event) */
     let lastUserPrompt: string | undefined
 
@@ -230,6 +231,12 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
         traces.set(runKey, traceId)
         currentTraceId = traceId
         return traceId
+    }
+
+    /** The state of the turn in progress: the one that started last. */
+    function getLatestTurn(): TurnState | undefined {
+        if (turns.size === 0) return undefined
+        return turns.get(Math.max(...turns.keys()))
     }
 
     async function ensureClient(): Promise<import('posthog-node').PostHog | null> {
@@ -332,180 +339,167 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
     })
 
     // Capture context messages for input tracking
-    pi.on('context', async (event) => {
+    pi.on('context', async (event, ctx) => {
         // Find the most recent turn and attach context messages as input
-        const turnKeys = Array.from(turns.keys())
-        if (turnKeys.length === 0) return
-
-        const latestTurnIndex = Math.max(...turnKeys)
-        const turnState = turns.get(latestTurnIndex)
+        const turnState = getLatestTurn()
         if (!turnState) return
 
+        // Pi sends the model request right after `context`
+        turnState.requestStartTime = Date.now()
+
         if (!config.privacyMode) {
-            // Convert messages to a simplified format for PostHog
-            turnState.input = event.messages.map((msg) => {
-                if ('role' in msg) {
-                    const role = msg.role
-                    if (role === 'user') {
-                        const userContent =
-                            typeof msg.content === 'string' || Array.isArray(msg.content)
-                                ? msg.content
-                                : safeStringify(msg.content)
-
-                        return {
-                            role: 'user',
-                            content: userContent,
-                        }
-                    }
-                    if (role === 'assistant') {
-                        const assistantMsg = msg as { role: 'assistant'; content: unknown[] }
-                        const textParts = assistantMsg.content
-                            .filter(
-                                (c: unknown) =>
-                                    typeof c === 'object' && c !== null && (c as { type: string }).type === 'text'
-                            )
-                            .map((c: unknown) => (c as { text: string }).text)
-                        return {
-                            role: 'assistant',
-                            content: textParts.join(''),
-                        }
-                    }
-                    if (role === 'toolResult') {
-                        const toolMsg = msg as { role: 'toolResult'; toolName: string; content: unknown[] }
-                        return {
-                            role: 'tool',
-                            content: toolMsg.content
-                                .filter(
-                                    (c: unknown) =>
-                                        typeof c === 'object' && c !== null && (c as { type: string }).type === 'text'
-                                )
-                                .map((c: unknown) => (c as { text: string }).text)
-                                .join(''),
-                        }
-                    }
-                }
-                return { role: 'unknown', content: safeStringify(msg) }
-            })
+            // Pi's `context` messages leave out the system prompt, so it is read separately.
+            let systemPrompt: string | undefined
+            try {
+                systemPrompt = ctx?.getSystemPrompt?.()
+            } catch {
+                systemPrompt = undefined
+            }
+            turnState.input = formatContextMessages(event.messages, systemPrompt)
         }
     })
 
-    // Track message start for LLM latency
-    pi.on('message_start', async (event) => {
-        const msg = event.message as unknown as Record<string, unknown>
-        if (msg.role === 'assistant' && typeof msg.timestamp === 'number') {
-            messageStartTimes.set(msg.timestamp, Date.now())
+    /**
+     * Send one `$ai_generation` for an assistant message.
+     *
+     * This runs on `message_end`, which Pi emits as soon as the model's response is complete
+     * and before any of its tool calls run. Sending it there gives the event the time the
+     * response ended, and lets the tool spans that follow find the generation that made them.
+     */
+    async function captureGeneration(turnState: TurnState, message: unknown): Promise<void> {
+        const assistantMsg = message as {
+            role: 'assistant'
+            model: string
+            provider: string
+            usage: {
+                input: number
+                output: number
+                cacheRead: number
+                cacheWrite: number
+                totalTokens: number
+                cost: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number }
+            }
+            stopReason: string
+            errorMessage?: string
+            content: unknown[]
+            timestamp: number
+            durationMs?: number
         }
-    })
 
-    // Capture turn end with assistant message details
-    pi.on('turn_end', async (event) => {
+        turnState.generationCaptured = true
+
         const phClient = await ensureClient()
         if (!phClient) return
 
+        const assistantInfo: LastAssistantInfo = {}
+        assistantInfo.model = assistantMsg.model
+        assistantInfo.provider = assistantMsg.provider
+        assistantInfo.stopReason = assistantMsg.stopReason
+        assistantInfo.errorMessage = assistantMsg.errorMessage
+        assistantInfo.usage = {
+            input: assistantMsg.usage.input,
+            output: assistantMsg.usage.output,
+            cacheRead: assistantMsg.usage.cacheRead,
+            cacheWrite: assistantMsg.usage.cacheWrite,
+            totalTokens: assistantMsg.usage.totalTokens,
+        }
+        assistantInfo.cost = assistantMsg.usage.cost
+
+        // Update current model/provider from actual response
+        currentModelId = assistantMsg.model
+        currentProviderId = assistantMsg.provider
+        turnState.model = assistantMsg.model
+        turnState.provider = assistantMsg.provider
+
+        // Extract text content and tool calls for output
+        const outputText = extractAssistantText(assistantMsg.content, '\n')
+        if (outputText.length > 0) {
+            assistantInfo.outputText = outputText
+        }
+        const toolCalls = extractToolCalls(assistantMsg.content)
+        if (toolCalls.length > 0) {
+            assistantInfo.toolCalls = toolCalls
+        }
+
+        // LLM latency: Pi measures the response from the request start in `durationMs`.
+        // When it does not, measure from the `context` event up to now, the response's end.
+        if (typeof assistantMsg.durationMs === 'number') {
+            assistantInfo.llmLatencyMs = assistantMsg.durationMs
+        } else if (turnState.requestStartTime !== undefined) {
+            assistantInfo.llmLatencyMs = Math.max(0, Date.now() - turnState.requestStartTime)
+        }
+
+        // Tool spans are children of the generation that made the call
+        currentGenerationSpanId = turnState.spanId
+        for (const toolCall of toolCalls) {
+            if (toolCall.id) toolCallGenerations.set(toolCall.id, turnState.spanId)
+        }
+
+        // Accumulate token totals for the trace
+        const inputTokens = assistantMsg.usage.input ?? 0
+        const outputTokens = assistantMsg.usage.output ?? 0
+        if (inputTokens > 0 || outputTokens > 0) {
+            const existing = traceTokens.get(turnState.traceId)
+            if (existing) {
+                existing.input += inputTokens
+                existing.output += outputTokens
+            } else {
+                traceTokens.set(turnState.traceId, { input: inputTokens, output: outputTokens })
+            }
+        }
+
+        // Update session window timestamp
+        if (sessionWindow) {
+            sessionWindow.lastOutputAt = Date.now()
+        }
+
+        // Build and send generation event
+        const generation = buildAiGeneration(
+            turnState,
+            assistantInfo,
+            config,
+            projectName,
+            agentName,
+            resolvedDistinctId
+        )
+
+        phClient.capture({
+            distinctId: generation.distinctId,
+            event: generation.event,
+            properties: generation.properties,
+        })
+
+        // A further model call in the same turn is its own generation
+        turnState.spanId = randomUUID()
+        turnState.userPrompt = undefined
+        turnState.requestStartTime = undefined
+    }
+
+    // Capture each model response as soon as it is complete
+    pi.on('message_end', async (event) => {
+        const msg = event.message as unknown as Record<string, unknown>
+        if (msg.role !== 'assistant') return
+
+        const turnState = getLatestTurn()
+        if (!turnState) return
+        await captureGeneration(turnState, msg)
+    })
+
+    // End the turn. Its generation was sent on `message_end`; send it here if that did not happen.
+    pi.on('turn_end', async (event) => {
         const turnState = turns.get(event.turnIndex)
         if (!turnState) return
         turns.delete(event.turnIndex)
 
-        // Extract assistant info from the message
         const msg = event.message
-        const assistantInfo: LastAssistantInfo = {}
-
-        if ('role' in msg && msg.role === 'assistant') {
-            const assistantMsg = msg as {
-                role: 'assistant'
-                model: string
-                provider: string
-                usage: {
-                    input: number
-                    output: number
-                    cacheRead: number
-                    cacheWrite: number
-                    totalTokens: number
-                    cost: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number }
-                }
-                stopReason: string
-                errorMessage?: string
-                content: unknown[]
-                timestamp: number
-            }
-
-            assistantInfo.model = assistantMsg.model
-            assistantInfo.provider = assistantMsg.provider
-            assistantInfo.stopReason = assistantMsg.stopReason
-            assistantInfo.errorMessage = assistantMsg.errorMessage
-            assistantInfo.usage = {
-                input: assistantMsg.usage.input,
-                output: assistantMsg.usage.output,
-                cacheRead: assistantMsg.usage.cacheRead,
-                cacheWrite: assistantMsg.usage.cacheWrite,
-                totalTokens: assistantMsg.usage.totalTokens,
-            }
-            assistantInfo.cost = assistantMsg.usage.cost
-
-            // Update current model/provider from actual response
-            currentModelId = assistantMsg.model
-            currentProviderId = assistantMsg.provider
-            turnState.model = assistantMsg.model
-            turnState.provider = assistantMsg.provider
-
-            // Extract text content for output
-            const textParts = assistantMsg.content
-                .filter((c: unknown) => typeof c === 'object' && c !== null && (c as { type: string }).type === 'text')
-                .map((c: unknown) => (c as { text: string }).text)
-
-            if (textParts.length > 0) {
-                assistantInfo.outputText = textParts.join('\n')
-            }
-
-            // Calculate actual LLM latency from message_start/message_end
-            const msgStartTime = messageStartTimes.get(assistantMsg.timestamp)
-            if (msgStartTime) {
-                assistantInfo.llmLatencyMs = Date.now() - msgStartTime
-                messageStartTimes.delete(assistantMsg.timestamp)
-            }
-
-            // Update generation span for tool parenting
-            currentGenerationSpanId = turnState.spanId
-
-            // Accumulate token totals for the trace
-            const inputTokens = assistantMsg.usage.input ?? 0
-            const outputTokens = assistantMsg.usage.output ?? 0
-            if (inputTokens > 0 || outputTokens > 0) {
-                const existing = traceTokens.get(turnState.traceId)
-                if (existing) {
-                    existing.input += inputTokens
-                    existing.output += outputTokens
-                } else {
-                    traceTokens.set(turnState.traceId, { input: inputTokens, output: outputTokens })
-                }
-            }
-
-            // Update session window timestamp
-            if (sessionWindow) {
-                sessionWindow.lastOutputAt = Date.now()
-            }
-
-            // Build and send generation event
-            const generation = buildAiGeneration(
-                turnState,
-                assistantInfo,
-                config,
-                projectName,
-                agentName,
-                resolvedDistinctId
-            )
-
-            phClient.capture({
-                distinctId: generation.distinctId,
-                event: generation.event,
-                properties: generation.properties,
-            })
+        if (!turnState.generationCaptured && 'role' in msg && msg.role === 'assistant') {
+            await captureGeneration(turnState, msg)
         }
     })
 
     // Track tool execution timing
     pi.on('tool_execution_start', async (event) => {
-        toolStartTimes.set(event.toolCallId, { startTime: Date.now(), args: event.args })
+        toolStartTimes.set(event.toolCallId, { startTime: Date.now(), args: event.args, spanId: randomUUID() })
     })
 
     // Capture tool spans
@@ -517,24 +511,35 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
 
         const toolInfo = toolStartTimes.get(event.toolCallId)
         toolStartTimes.delete(event.toolCallId)
-        const durationMs = toolInfo ? Date.now() - toolInfo.startTime : null
+        const durationMs =
+            typeof event.durationMs === 'number' ? event.durationMs : toolInfo ? Date.now() - toolInfo.startTime : null
+
+        // A call another tool made (a codemode script, say) is a child of that tool's span;
+        // otherwise the parent is the generation that made the call.
+        const parentToolCallId = (event as { parentToolCallId?: string }).parentToolCallId
+        const parentSpanId =
+            (parentToolCallId ? toolStartTimes.get(parentToolCallId)?.spanId : undefined) ??
+            toolCallGenerations.get(event.toolCallId) ??
+            currentGenerationSpanId
+        toolCallGenerations.delete(event.toolCallId)
 
         const sessionId = sessionWindow?.sessionId
 
         const span = buildAiSpan(
             currentTraceId,
-            currentGenerationSpanId,
+            parentSpanId,
             event.toolName,
             toolInfo?.args,
             event.result,
             durationMs,
             event.isError,
-            event.isError ? (safeStringify(event.result) ?? null) : null,
+            event.isError ? formatToolError(event.result) : null,
             config,
             projectName,
             agentName,
             sessionId,
-            resolvedDistinctId
+            resolvedDistinctId,
+            toolInfo?.spanId
         )
 
         phClient.capture({
@@ -593,6 +598,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
                 traceTokens.delete(currentTraceId)
             }
             currentGenerationSpanId = undefined
+            toolCallGenerations.clear()
         }
 
         agentStartTime = undefined
@@ -608,7 +614,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
         traces.clear()
         traceTokens.clear()
         toolStartTimes.clear()
-        messageStartTimes.clear()
+        toolCallGenerations.clear()
         currentGenerationSpanId = undefined
         currentTraceId = undefined
         currentModelId = 'unknown'

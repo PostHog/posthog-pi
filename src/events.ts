@@ -55,8 +55,15 @@ export function buildAiGeneration(
     // Format output choices from assistant text content
     let outputChoices: unknown = null
     if (!config.privacyMode) {
-        if (assistantInfo.outputText) {
-            outputChoices = [{ role: 'assistant', content: assistantInfo.outputText }]
+        const toolCalls = assistantInfo.toolCalls ?? []
+        if (assistantInfo.outputText || toolCalls.length > 0) {
+            outputChoices = [
+                {
+                    role: 'assistant',
+                    content: assistantInfo.outputText ?? '',
+                    ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+                },
+            ]
         } else if (assistantInfo.stopReason === 'error') {
             outputChoices = [{ role: 'assistant', content: assistantInfo.errorMessage ?? 'Error' }]
         }
@@ -112,10 +119,10 @@ export function buildAiSpan(
     projectName: string,
     agentName: string,
     sessionId?: string,
-    configuredDistinctId?: string
+    configuredDistinctId?: string,
+    spanId: string = randomUUID()
 ): AiSpanEvent {
     const distinctId = configuredDistinctId ?? sessionId ?? 'pi-agent'
-    const spanId = randomUUID()
     const latency = durationMs !== null ? durationMs / 1000 : null
 
     return {
@@ -127,6 +134,7 @@ export function buildAiSpan(
             $ai_span_id: spanId,
             $ai_parent_id: parentSpanId ?? null,
             $ai_span_name: toolName,
+            $ai_span_type: 'tool',
             $ai_input_state: config.privacyMode ? null : serializeAttribute(toolInput, config.maxAttributeLength),
             $ai_output_state: config.privacyMode ? null : serializeAttribute(toolOutput, config.maxAttributeLength),
             $ai_latency: latency,

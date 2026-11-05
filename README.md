@@ -116,51 +116,52 @@ If `POSTHOG_DISTINCT_ID` is not set, `@posthog/pi` will try to discover your ide
 
 ### `$ai_generation`
 
-Captured on every LLM call (one per turn).
+Captured on every LLM call, as soon as the response ends and before its tool calls run.
 
-| Property                          | Description                                                       |
-| --------------------------------- | ----------------------------------------------------------------- |
-| `$ai_model`                       | Model name (e.g. `claude-sonnet-4-20250514`)                      |
-| `$ai_provider`                    | Provider name (e.g. `anthropic`, `openai`)                        |
-| `$ai_latency`                     | LLM response duration in seconds (actual LLM time when available) |
-| `$ai_input_tokens`                | Input token count                                                 |
-| `$ai_output_tokens`               | Output token count                                                |
-| `$ai_total_tokens`                | Total token count                                                 |
-| `$ai_total_cost_usd`              | Total cost in USD                                                 |
-| `$ai_input_cost_usd`              | Input cost in USD                                                 |
-| `$ai_output_cost_usd`             | Output cost in USD                                                |
-| `$ai_stop_reason`                 | Why generation stopped (`stop`, `length`, `tool_calls`, `error`)  |
-| `$ai_is_error`                    | Whether the generation errored                                    |
-| `$ai_error`                       | Error message (if any)                                            |
-| `$ai_input`                       | Input messages (redacted in privacy mode)                         |
-| `$ai_output_choices`              | Output choices (redacted in privacy mode)                         |
-| `$ai_user_prompt`                 | Raw user prompt text (redacted in privacy mode)                   |
-| `$ai_trace_id`                    | Trace ID for hierarchical grouping                                |
-| `$ai_span_id`                     | Span ID for this generation                                       |
-| `$ai_session_id`                  | Session identifier                                                |
-| `$ai_project_name`                | Project name                                                      |
-| `$ai_agent_name`                  | Agent name (includes subagent name if applicable)                 |
-| `$ai_cache_read_input_tokens`     | Cache read token count                                            |
-| `$ai_cache_creation_input_tokens` | Cache creation token count                                        |
-| `$ai_cache_reporting_exclusive`   | Always `true`: `$ai_input_tokens` excludes cached tokens          |
+| Property                          | Description                                                            |
+| --------------------------------- | ---------------------------------------------------------------------- |
+| `$ai_model`                       | Model name (e.g. `claude-sonnet-4-20250514`)                           |
+| `$ai_provider`                    | Provider name (e.g. `anthropic`, `openai`)                             |
+| `$ai_latency`                     | LLM request duration in seconds, excluding tool execution              |
+| `$ai_input_tokens`                | Input token count                                                      |
+| `$ai_output_tokens`               | Output token count                                                     |
+| `$ai_total_tokens`                | Total token count                                                      |
+| `$ai_total_cost_usd`              | Total cost in USD                                                      |
+| `$ai_input_cost_usd`              | Input cost in USD                                                      |
+| `$ai_output_cost_usd`             | Output cost in USD                                                     |
+| `$ai_stop_reason`                 | Why generation stopped (`stop`, `length`, `tool_calls`, `error`)       |
+| `$ai_is_error`                    | Whether the generation errored                                         |
+| `$ai_error`                       | Error message (if any)                                                 |
+| `$ai_input`                       | System prompt and messages, with tool calls (redacted in privacy mode) |
+| `$ai_output_choices`              | Response text and tool calls (redacted in privacy mode)                |
+| `$ai_user_prompt`                 | Raw user prompt text (redacted in privacy mode)                        |
+| `$ai_trace_id`                    | Trace ID for hierarchical grouping                                     |
+| `$ai_span_id`                     | Span ID for this generation                                            |
+| `$ai_session_id`                  | Session identifier                                                     |
+| `$ai_project_name`                | Project name                                                           |
+| `$ai_agent_name`                  | Agent name (includes subagent name if applicable)                      |
+| `$ai_cache_read_input_tokens`     | Cache read token count                                                 |
+| `$ai_cache_creation_input_tokens` | Cache creation token count                                             |
+| `$ai_cache_reporting_exclusive`   | Always `true`: `$ai_input_tokens` excludes cached tokens               |
 
 ### `$ai_span`
 
 Captured for each tool execution (read, write, edit, bash, etc.).
 
-| Property           | Description                                                         |
-| ------------------ | ------------------------------------------------------------------- |
-| `$ai_span_name`    | Tool name                                                           |
-| `$ai_latency`      | Tool execution duration in seconds                                  |
-| `$ai_is_error`     | Whether the tool call errored                                       |
-| `$ai_error`        | Error message (if any)                                              |
-| `$ai_input_state`  | Tool input parameters (sensitive keys redacted, privacy mode aware) |
-| `$ai_output_state` | Tool output result (sensitive keys redacted, privacy mode aware)    |
-| `$ai_trace_id`     | Trace ID                                                            |
-| `$ai_span_id`      | Span ID for this tool call                                          |
-| `$ai_parent_id`    | Parent generation span ID                                           |
-| `$ai_project_name` | Project name                                                        |
-| `$ai_agent_name`   | Agent name                                                          |
+| Property           | Description                                                           |
+| ------------------ | --------------------------------------------------------------------- |
+| `$ai_span_name`    | Tool name                                                             |
+| `$ai_span_type`    | Always `tool`                                                         |
+| `$ai_latency`      | Tool execution duration in seconds                                    |
+| `$ai_is_error`     | Whether the tool call errored                                         |
+| `$ai_error`        | Error message (if any)                                                |
+| `$ai_input_state`  | Tool input parameters (sensitive keys redacted, privacy mode aware)   |
+| `$ai_output_state` | Tool output result (sensitive keys redacted, privacy mode aware)      |
+| `$ai_trace_id`     | Trace ID                                                              |
+| `$ai_span_id`      | Span ID for this tool call                                            |
+| `$ai_parent_id`    | Span ID of the generation that made the call (or of the calling tool) |
+| `$ai_project_name` | Project name                                                          |
+| `$ai_agent_name`   | Agent name                                                            |
 
 ### `$ai_trace`
 
