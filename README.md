@@ -106,11 +106,36 @@ export POSTHOG_MCP_MAX_INLINE_CHARS="12000"
 | `POSTHOG_AGENT_NAME`             | project name                                                                  | Agent name (auto-detects subagent names from pi-subagents)                                                                                             |
 | `POSTHOG_DISTINCT_ID`            | auto-discovered from PostHog personal API key (fallback: session id `pi:...`) | Override `distinct_id` used for all `$ai_*` events (for example `user@example.com`). When set, the extension also calls `identify()` on session start. |
 | `POSTHOG_TAGS`                   | _(none)_                                                                      | Custom tags added to all events (format: `key1:val1,key2:val2`)                                                                                        |
+| `POSTHOG_GROUPS`                 | _(none)_                                                                      | JSON object mapping group types to string or numeric group keys, e.g. `{"workspace":"foobar"}`                                                         |
 | `POSTHOG_MAX_ATTRIBUTE_LENGTH`   | `12000`                                                                       | Max length for serialized tool input/output attributes                                                                                                 |
 
 If `POSTHOG_DISTINCT_ID` is set, `@posthog/pi` calls `identify()` once on session start for that distinct ID. If the value looks like an email address, it is also sent as the `email` person property.
 
 If `POSTHOG_DISTINCT_ID` is not set, `@posthog/pi` will try to discover your identity from `POSTHOG_PERSONAL_API_KEY` (or `personalApiKey` in `~/.pi/agent/posthog.json`) and use that as `distinct_id`. If discovery fails, it falls back to session IDs (`pi:...`).
+
+### Group analytics
+
+To attribute every `$ai_generation`, `$ai_span`, and `$ai_trace` event to a [PostHog group](https://posthog.com/docs/product-analytics/group-analytics), configure group types and keys:
+
+```bash
+export POSTHOG_GROUPS='{"workspace":"foobar","organization":123}'
+```
+
+Or add `groups` to `~/.pi/agent/posthog.json`:
+
+```json
+{
+    "apiKey": "phc_your_project_key",
+    "groups": {
+        "workspace": "foobar",
+        "organization": 123
+    }
+}
+```
+
+`POSTHOG_GROUPS` replaces the entire file mapping; use `{}` to clear file-configured groups. Group types and string keys must be non-empty, and numeric keys must be finite (including `0`). Invalid configuration logs a warning and is ignored without falling back to file groups or interrupting capture.
+
+Groups are sent as `$groups` event attribution, including in privacy mode. They do not change `distinct_id` or create/update group profile properties (`$groupidentify`).
 
 ## What gets captured
 

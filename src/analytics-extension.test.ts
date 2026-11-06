@@ -1,6 +1,12 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getIdentifyProperties, registerAnalyticsExtension } from './analytics-extension.js'
+import { readConfigFile } from './utils.js'
+
+vi.mock('./utils.js', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('./utils.js')>()),
+    readConfigFile: vi.fn<typeof readConfigFile>(() => ({})),
+}))
 
 describe('getIdentifyProperties', () => {
     it('sets email when distinct id looks like an email', () => {
@@ -16,12 +22,24 @@ describe('getIdentifyProperties', () => {
     })
 })
 
-const captured = vi.hoisted(() => [] as Array<{ event: string; properties: Record<string, unknown>; at: number }>)
+const captured = vi.hoisted(
+    () =>
+        [] as Array<{
+            event: string
+            properties: Record<string, unknown>
+            groups?: Record<string, string | number>
+            at: number
+        }>
+)
 
 vi.mock('posthog-node', () => ({
     PostHog: class {
-        capture(message: { event: string; properties: Record<string, unknown> }) {
-            captured.push({ event: message.event, properties: message.properties, at: Date.now() })
+        capture(message: {
+            event: string
+            properties: Record<string, unknown>
+            groups?: Record<string, string | number>
+        }) {
+            captured.push({ ...message, at: Date.now() })
         }
         identify() {}
         async shutdown() {}
@@ -57,7 +75,13 @@ const usage = {
 }
 
 describe('registerAnalyticsExtension', () => {
-    const envKeys = ['POSTHOG_API_KEY', 'POSTHOG_PRIVACY_MODE', 'POSTHOG_ENABLED', 'POSTHOG_DISTINCT_ID'] as const
+    const envKeys = [
+        'POSTHOG_API_KEY',
+        'POSTHOG_PRIVACY_MODE',
+        'POSTHOG_ENABLED',
+        'POSTHOG_DISTINCT_ID',
+        'POSTHOG_GROUPS',
+    ] as const
     const savedEnv: Record<string, string | undefined> = {}
 
     beforeEach(() => {
@@ -66,12 +90,15 @@ describe('registerAnalyticsExtension', () => {
         process.env.POSTHOG_PRIVACY_MODE = 'false'
         process.env.POSTHOG_ENABLED = 'true'
         process.env.POSTHOG_DISTINCT_ID = 'user@example.com'
+        delete process.env.POSTHOG_GROUPS
+        vi.mocked(readConfigFile).mockReturnValue({})
         captured.length = 0
         vi.useFakeTimers()
         vi.setSystemTime(new Date('2026-11-04T12:00:00.000Z'))
     })
 
     afterEach(() => {
+        vi.restoreAllMocks()
         vi.useRealTimers()
         for (const key of envKeys) {
             if (savedEnv[key] === undefined) delete process.env[key]
@@ -152,6 +179,103 @@ describe('registerAnalyticsExtension', () => {
         return { generationEnd }
     }
 
+    it.each(['environment', 'file'] as const)('attributes every AI event to groups from %s', async (source) => {
+        const groups = { workspace: 'foobar', organization: 0 }
+        if (source === 'environment') process.env.POSTHOG_GROUPS = JSON.stringify(groups)
+        else vi.mocked(readConfigFile).mockReturnValue({ groups })
+
+        await runAgent()
+
+        expect(captured.map((event) => event.event)).toEqual([
+            '$ai_generation',
+            '$ai_span',
+            '$ai_generation',
+            '$ai_trace',
+        ])
+        for (const event of captured) expect(event.groups).toEqual(groups)
+    })
+
+    it('replaces file groups with the environment mapping rather than mixing workspaces', async () => {
+        vi.mocked(readConfigFile).mockReturnValue({ groups: { workspace: 'file-workspace', company: 'old' } })
+        process.env.POSTHOG_GROUPS = '{"workspace":"env-workspace"}'
+
+        await runAgent()
+
+        for (const event of captured) expect(event.groups).toEqual({ workspace: 'env-workspace' })
+    })
+
+    it('allows an empty environment mapping to clear file groups', async () => {
+        vi.mocked(readConfigFile).mockReturnValue({ groups: { workspace: 'file-workspace' } })
+        process.env.POSTHOG_GROUPS = '{}'
+
+        await runAgent()
+
+        for (const event of captured) expect(event.groups).toEqual({})
+    })
+
+    it('leaves group attribution unset when not configured', async () => {
+        await runAgent()
+
+        for (const event of captured) expect(event.groups).toBeUndefined()
+    })
+
+    it.each([
+        '',
+        'not-json',
+        'null',
+        '[]',
+        '"workspace"',
+        '{"workspace":true}',
+        '{"workspace":null}',
+        '{"workspace":{}}',
+        '{"workspace":[]}',
+        '{"workspace":""}',
+        '{"workspace":"   "}',
+        '{" ":"secret-workspace"}',
+        '{"workspace":1e400}',
+    ])('ignores invalid environment groups without interrupting capture: %s', async (value) => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        vi.mocked(readConfigFile).mockReturnValue({ groups: { workspace: 'file-workspace' } })
+        process.env.POSTHOG_GROUPS = value
+
+        await runAgent()
+
+        expect(captured).toHaveLength(4)
+        for (const event of captured) expect(event.groups).toBeUndefined()
+        expect(warn).toHaveBeenCalledExactlyOnceWith(
+            '@posthog/pi: invalid groups configuration; expected an object mapping non-empty group types to non-empty strings or finite numbers'
+        )
+    })
+
+    it('ignores invalid group values in the config file', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        vi.mocked(readConfigFile).mockReturnValue(JSON.parse('{"groups":{"workspace":false}}'))
+
+        await runAgent()
+
+        expect(captured).toHaveLength(4)
+        for (const event of captured) expect(event.groups).toBeUndefined()
+        expect(warn).toHaveBeenCalledOnce()
+    })
+
+    it('keeps group attribution in privacy mode', async () => {
+        process.env.POSTHOG_PRIVACY_MODE = 'true'
+        process.env.POSTHOG_GROUPS = '{"workspace":"foobar"}'
+
+        await runAgent()
+
+        for (const event of captured) expect(event.groups).toEqual({ workspace: 'foobar' })
+    })
+
+    it('captures nothing when disabled even if groups are configured', async () => {
+        process.env.POSTHOG_ENABLED = 'false'
+        process.env.POSTHOG_GROUPS = '{"workspace":"foobar"}'
+
+        await runAgent()
+
+        expect(captured).toEqual([])
+    })
+
     it('sends each generation when its response ends, before the tools it called', async () => {
         const { generationEnd } = await runAgent()
 
@@ -197,6 +321,7 @@ describe('registerAnalyticsExtension', () => {
     })
 
     it('sends a generation on turn_end when message_end did not send it', async () => {
+        process.env.POSTHOG_GROUPS = '{"workspace":"foobar"}'
         const { pi, emit } = fakePi()
         registerAnalyticsExtension(pi)
         await emit('session_start')
@@ -218,6 +343,7 @@ describe('registerAnalyticsExtension', () => {
 
         expect(captured.map((e) => e.event)).toEqual(['$ai_generation'])
         expect(captured[0]!.properties.$ai_latency).toBe(0.5)
+        expect(captured[0]!.groups).toEqual({ workspace: 'foobar' })
     })
 
     it('sends no message content in privacy mode', async () => {
