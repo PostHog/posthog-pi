@@ -29,6 +29,7 @@ export interface PostHogConfigFile {
     projectName?: string
     agentName?: string
     tags?: Record<string, string>
+    groups?: Record<string, string | number>
     /** Override event distinct_id (defaults to session id) */
     distinctId?: string
     maxAttributeLength?: number

@@ -102,6 +102,34 @@ export function getIdentifyProperties(distinctId: string): Record<string, unknow
     return properties
 }
 
+function getConfiguredGroups(fileGroups: unknown): Record<string, string | number> | undefined {
+    try {
+        const value: unknown =
+            process.env.POSTHOG_GROUPS !== undefined ? JSON.parse(process.env.POSTHOG_GROUPS) : fileGroups
+        if (value === undefined) return undefined
+        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error()
+
+        const entries = Object.entries(value)
+        for (const [groupType, groupKey] of entries) {
+            if (
+                groupType.trim().length === 0 ||
+                !(
+                    (typeof groupKey === 'string' && groupKey.trim().length > 0) ||
+                    (typeof groupKey === 'number' && Number.isFinite(groupKey))
+                )
+            ) {
+                throw new Error()
+            }
+        }
+        return Object.fromEntries(entries)
+    } catch {
+        console.warn(
+            '@posthog/pi: invalid groups configuration; expected an object mapping non-empty group types to non-empty strings or finite numbers'
+        )
+        return undefined
+    }
+}
+
 export function registerAnalyticsExtension(pi: ExtensionAPI) {
     // Read config file (env vars always take precedence)
     const file = readConfigFile()
@@ -148,6 +176,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
         projectName: process.env.POSTHOG_PROJECT_NAME ?? file.projectName,
         agentName: process.env.POSTHOG_AGENT_NAME ?? file.agentName,
         tags,
+        groups: getConfiguredGroups(file.groups),
         maxAttributeLength,
         distinctId: configuredDistinctId,
     }
@@ -467,6 +496,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
             distinctId: generation.distinctId,
             event: generation.event,
             properties: generation.properties,
+            groups: config.groups,
         })
 
         // A further model call in the same turn is its own generation
@@ -546,6 +576,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
             distinctId: span.distinctId,
             event: span.event,
             properties: span.properties,
+            groups: config.groups,
         })
     })
 
@@ -588,6 +619,7 @@ export function registerAnalyticsExtension(pi: ExtensionAPI) {
             distinctId: trace.distinctId,
             event: trace.event,
             properties: trace.properties,
+            groups: config.groups,
         })
 
         // Clean up in message mode
