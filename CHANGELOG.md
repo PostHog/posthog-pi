@@ -1,5 +1,11 @@
 # @posthog/pi
 
+## 0.6.0
+
+### Minor Changes
+
+- 48661ac: Add `POSTHOG_GROUPS` and config-file `groups` support to attribute generations, tool spans, and traces to PostHog groups.
+
 ## 0.5.0
 
 ### Minor Changes
